@@ -156,7 +156,7 @@ export function createSubmission(levelId: string): Submission {
   return {
     levelId,
     values: {},
-    updatedAt: new Date().toISOString()
+    updatedAt: ""
   };
 }
 

@@ -26,8 +26,8 @@
 ## 使用方式
 
 1. 安装依赖：`npm install`。
-2. 启动开发服务：`npm run dev`。
-3. 打开 Next.js 输出的本地地址，进入闯关训练产品。
+2. 启动本地开发服务：`npm run dev:local`。
+3. 打开 [http://127.0.0.1:3000](http://127.0.0.1:3000)，进入闯关训练产品。
 4. 先读 `00_project_brief.md` 和 `01_mvp_prd.md`，确认项目目标与第一版范围。
 5. 按 `02_level_design.md` 完成 6 个关卡，期间让 AI Game Master 追问和整理。
 6. 用 `templates/experience_report_outline.md` 生成第一版体验报告。

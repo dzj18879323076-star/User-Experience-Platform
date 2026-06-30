@@ -48,6 +48,19 @@ function getScoreLabel(score: number) {
   };
 }
 
+function getNextAction(score: number, hasReportCard: boolean, hasNextLevel: boolean) {
+  if (score < 55) {
+    return "继续填写体验记录，先补齐关键观察。";
+  }
+  if (score < 80) {
+    return "补充路径、证据和产品归因，再生成汇报卡。";
+  }
+  if (!hasReportCard) {
+    return "生成阶段汇报卡，沉淀本关结论。";
+  }
+  return hasNextLevel ? "进入下一关，继续完成训练链路。" : "生成完整报告草稿，准备复盘输出。";
+}
+
 function buildReportCard(level: Level, submission: Submission) {
   const score = scoreSubmission(level, submission);
   const fields = getLevelFields(level);
@@ -78,7 +91,7 @@ ${submission.values["产品机会"] || submission.values["评价缺口"] || subm
 - 最大流失点发生在哪个页面或动作？
 - 哪些数据可以验证这个问题的影响规模？
 
-AI 草稿评分：${score}/100
+规则草稿评分：${score}/100
 缺失字段：${missing.length ? missing.join("、") : "无"}
 
 下一关建议：
@@ -120,6 +133,7 @@ export default function QuestPage() {
   const [isHydrated, setIsHydrated] = useState(false);
   const [autosaveText, setAutosaveText] = useState("未保存");
   const [reportCard, setReportCard] = useState("");
+  const [reportCardStatus, setReportCardStatus] = useState("尚未生成");
   const [reportOutput, setReportOutput] = useState("");
 
   useEffect(() => {
@@ -140,8 +154,12 @@ export default function QuestPage() {
   const activeSubmission = getSubmission(state, activeLevel.id);
   const activeScore = scoreSubmission(activeLevel, activeSubmission);
   const scoreCopy = getScoreLabel(activeScore);
+  const activeLevelIndex = levels.findIndex((level) => level.id === activeLevel.id);
+  const nextLevel = levels[activeLevelIndex + 1];
+  const canAdvance = activeScore >= 80;
   const completedCount = levels.filter((level) => isComplete(level, state.submissions[level.id])).length;
   const percent = Math.round((completedCount / levels.length) * 100);
+  const nextAction = getNextAction(activeScore, Boolean(reportCard), Boolean(nextLevel));
 
   useEffect(() => {
     setAutosaveText(activeSubmission.updatedAt ? `已保存 ${formatTime(activeSubmission.updatedAt)}` : "未保存");
@@ -180,6 +198,8 @@ export default function QuestPage() {
       ...current,
       activeLevelId: levelId
     }));
+    setReportCard("");
+    setReportCardStatus("尚未生成");
   }
 
   function saveProgress() {
@@ -204,6 +224,7 @@ export default function QuestPage() {
   function generateReportCard() {
     const card = buildReportCard(activeLevel, activeSubmission);
     setReportCard(card);
+    setReportCardStatus(canAdvance ? "已生成，可复制或进入下一关" : "已生成，建议补充后再进入下一关");
     return card;
   }
 
@@ -216,6 +237,7 @@ export default function QuestPage() {
   async function copyReportCard() {
     const text = reportCard.trim() ? reportCard : generateReportCard();
     await navigator.clipboard.writeText(text.trim());
+    setReportCardStatus("已复制到剪贴板");
     setAutosaveText("汇报卡已复制");
   }
 
@@ -223,6 +245,11 @@ export default function QuestPage() {
     const text = reportOutput.trim() ? reportOutput : generateFullReport();
     await navigator.clipboard.writeText(text);
     setAutosaveText("报告已复制");
+  }
+
+  function goToNextLevel() {
+    if (!nextLevel || !canAdvance) return;
+    switchLevel(nextLevel.id);
   }
 
   const scoreRingStyle: CSSProperties = {
@@ -250,6 +277,10 @@ export default function QuestPage() {
         <div>
           <span className="status-label">当前徽章</span>
           <strong>{activeLevel.badge}</strong>
+        </div>
+        <div>
+          <span className="status-label">当前下一步</span>
+          <strong>{nextAction}</strong>
         </div>
         <div className="progress-track" aria-label="完成进度">
           <div style={{ width: `${percent}%` }} />
@@ -362,14 +393,26 @@ export default function QuestPage() {
             <button className="ghost-button" type="button" onClick={copyReportCard}>
               复制汇报卡
             </button>
+            <button
+              className="primary-button next-button"
+              type="button"
+              onClick={goToNextLevel}
+              disabled={!nextLevel || !canAdvance}
+            >
+              {nextLevel ? "进入下一关" : "已到最后一关"}
+            </button>
           </div>
+          <div className={`report-status ${reportCard ? "ready" : ""}`}>{reportCardStatus}</div>
           <div className="report-card">
             {reportCard ? reportCard : <p className="muted">阶段汇报卡会显示在这里。</p>}
           </div>
 
           <div className="report-panel">
             <div className="panel-heading compact">
-              <h2>报告草稿</h2>
+              <div>
+                <h2>最终报告草稿</h2>
+                <span>完成多关后再生成</span>
+              </div>
               <div className="inline-actions">
                 <button className="text-button" type="button" onClick={generateFullReport}>
                   生成
