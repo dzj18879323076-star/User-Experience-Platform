@@ -7,11 +7,15 @@ desktop.ini
 
 # Dependencies and build output
 node_modules/
+.next/
+out/
 dist/
 build/
 .cache/
 .tmp/
 coverage/
+.vercel/
+*.tsbuildinfo
 
 # Local environment and secrets
 .env

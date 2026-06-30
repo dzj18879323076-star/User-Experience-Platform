@@ -133,8 +133,7 @@ h3 {
   overflow: hidden;
 }
 
-#progressBar {
-  width: 0%;
+.progress-track > div {
   height: 100%;
   background: var(--accent);
   transition: width .2s ease;
@@ -403,7 +402,6 @@ h3 {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: conic-gradient(var(--accent) 0deg, #d9e2e8 0deg);
   color: var(--ink);
   font-size: 22px;
   font-weight: 900;
@@ -444,7 +442,7 @@ h3 {
   margin-bottom: 8px;
 }
 
-#reportOutput {
+.report-panel textarea {
   width: 100%;
   min-height: 260px;
   resize: vertical;

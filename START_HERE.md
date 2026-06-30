@@ -11,9 +11,9 @@
 - Git 工作流：`docs/GIT_WORKFLOW.md`
 - 工作指南：`docs/WORKING_GUIDE.md`
 - Skill 推荐复盘：`docs/SKILL_RECOMMENDATION_RETRO.md`
-- 静态 Web MVP：`web/index.html`
-- 游戏化 UI 原型：`web/prototype.html`
-- A+C 融合版原型：`web/prototype.html?variant=D`
+- Next.js Web MVP：`app/page.tsx`
+- 游戏化 UI 原型：`public/prototype/prototype.html`
+- A+C 融合版原型：`/prototype/prototype.html?variant=D`
 - 融合版设计说明：`docs/FUSED_GAME_UI_DIRECTION.md`
 
 ## 你现在要做哪一步？
@@ -28,13 +28,14 @@
 
 适合在和 leader 或同事沟通前使用。
 
-### B. 直接打开网页 MVP
+### B. 启动网页 MVP
 
-打开：
+运行：
 
-- `web/index.html`
+- `npm install`
+- `npm run dev`
 
-当前网页支持关卡切换、体验记录、本地保存、阶段汇报卡草稿、报告草稿和 JSON 导出。
+当前 Next.js 应用支持关卡切换、体验记录、本地保存、阶段汇报卡草稿、报告草稿和 JSON 导出。
 
 ### C. 继续完善闯关内容
 

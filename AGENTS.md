@@ -71,9 +71,9 @@ For substantial changes, follow this loop:
 - `docs/TECH_SPEC.md`
 - `docs/PDE_PLAYBOOK.md`
 - `docs/WORKING_GUIDE.md`
-- `web/index.html`
-- `web/styles.css`
-- `web/app.js`
+- `app/page.tsx`
+- `app/globals.css`
+- `lib/quest.ts`
 - `config/levels.yaml`
 - `runs/trial_01.md`
 
@@ -87,8 +87,8 @@ For substantial changes, follow this loop:
 
 ## Engineering Notes
 
-- Current MVP is static HTML/CSS/JS and uses `localStorage`.
-- Avoid adding a framework until the interaction model stabilizes.
+- Current MVP uses Next.js App Router and keeps browser `localStorage` as the persistence layer.
+- Keep the app lightweight; do not introduce backend persistence until multi-user review is required.
 - If deployment is needed, prefer static hosting first.
 - If persistence or multi-user review is needed, introduce a backend or database later.
 

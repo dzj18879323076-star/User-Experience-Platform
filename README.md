@@ -18,16 +18,21 @@
 - `02_level_design.md`：首版关卡设计
 - `03_ai_game_master.md`：AI Game Master 角色、提示词和输出规范
 - `04_trial_plan.md`：你作为第一个用户的试跑计划
+- `app/`：Next.js App Router 主应用
+- `lib/quest.ts`：关卡数据、评分和报告生成的核心类型/逻辑
 - `config/levels.yaml`：结构化关卡配置草案
+- `public/prototype/`：游戏化 UI 原型
 - `templates/experience_report_outline.md`：最终体验报告模板
 
 ## 使用方式
 
-1. 先读 `00_project_brief.md`，确认项目目标和不做什么。
-2. 再读 `01_mvp_prd.md`，确认第一版产品范围。
-3. 按 `02_level_design.md` 完成 6 个关卡，期间让 AI Game Master 追问和整理。
-4. 用 `templates/experience_report_outline.md` 生成第一版体验报告。
-5. 根据 `04_trial_plan.md` 做一次自测复盘，决定是否扩展为团队工具。
+1. 安装依赖：`npm install`。
+2. 启动开发服务：`npm run dev`。
+3. 打开 Next.js 输出的本地地址，进入闯关训练产品。
+4. 先读 `00_project_brief.md` 和 `01_mvp_prd.md`，确认项目目标与第一版范围。
+5. 按 `02_level_design.md` 完成 6 个关卡，期间让 AI Game Master 追问和整理。
+6. 用 `templates/experience_report_outline.md` 生成第一版体验报告。
+7. 根据 `04_trial_plan.md` 做一次自测复盘，决定是否扩展为团队工具。
 
 ## 项目原则
 
