@@ -1,0 +1,137 @@
+project: life_service_onboarding_quest
+version: 0.1
+theme: 抖音生活服务评价生产与看评消费体验
+default_mode: standard
+
+levels:
+  - id: L1
+    name: 找店迷宫
+    perspective: 消费者
+    badge: 消费决策侦探
+    estimated_minutes: 30
+    goal: 代入真实消费需求，体验从需求产生到选择商户的完整链路。
+    main_task: 选择一个真实消费需求，从抖音内自然搜索或刷到内容，记录完整决策路径。
+    output:
+      - 消费需求
+      - 入口
+      - 完整路径
+      - 关键决策节点
+      - 评价出现位置
+      - 最大卡点
+      - 产品机会
+    pass_criteria:
+      - 路径不少于 4 个节点
+      - 至少记录 2 个决策点
+      - 至少提出 1 个评价相关问题
+
+  - id: L2
+    name: 看评裁判所
+    perspective: 看评用户
+    badge: 评价质量鉴定师
+    estimated_minutes: 40
+    goal: 判断什么样的评价真正帮助消费决策。
+    main_task: 选择 3 个商户或商品页面，每个页面分析 2 条有用评价和 2 条无用评价。
+    output:
+      - 样本对象
+      - 有用评价样本
+      - 有用原因
+      - 无用评价样本
+      - 无用原因
+      - 评价缺口
+      - 决策影响
+    pass_criteria:
+      - 至少分析 6 条评价
+      - 能区分内容丰富和决策有用
+      - 形成 1 条评价质量判断规则
+
+  - id: L3
+    name: 团购商品实验室
+    perspective: 商品/交易用户
+    badge: 商品评价拆解师
+    estimated_minutes: 30
+    goal: 理解商品评价和地点评价的差异。
+    main_task: 找一个团购商品或套餐，对比商品页评价和门店/POI 评价。
+    output:
+      - 商品/套餐
+      - 对应地点
+      - 商品评价关注点
+      - 地点评价关注点
+      - 二者重叠点
+      - 二者缺口
+      - 产品机会
+    pass_criteria:
+      - 明确商品评价和地点评价至少 3 个差异
+      - 提出 1 个商品评价结构化机会
+
+  - id: L4
+    name: 创作者通道
+    perspective: 创作者/达人
+    badge: 创作者路径观察员
+    estimated_minutes: 30
+    goal: 理解达人内容、普通评价和交易转化之间的关系。
+    main_task: 从一条生活服务短视频或直播入口出发，观察内容如何把你带到商品或商户。
+    output:
+      - 内容入口
+      - 内容类型
+      - 交易入口
+      - 评价入口
+      - 达人内容的作用
+      - 普通评价的作用
+      - 信任断点
+      - 产品机会
+    pass_criteria:
+      - 画出从内容到交易的路径
+      - 明确达人内容和普通评价的角色差异
+
+  - id: L5
+    name: 商家镜像
+    perspective: 商家
+    badge: 商家经营翻译官
+    estimated_minutes: 30
+    goal: 从商家视角反推评价的经营价值。
+    main_task: 选择一个商户页面，假设你是商家，判断哪些评价信息会影响经营动作。
+    output:
+      - 商户类型
+      - 评价主要反馈
+      - 商家可行动信息
+      - 商家无法判断的信息
+      - 商家回复体验
+      - 经营诊断机会
+    pass_criteria:
+      - 至少提出 3 类商家可行动信息
+      - 区分展示给用户的评价和给商家的经营反馈
+
+  - id: L6
+    name: 平台分发台
+    perspective: 平台
+    badge: 平台分发裁判
+    estimated_minutes: 40
+    goal: 建立一套评价质量和分发价值的初版 rubric。
+    main_task: 挑选 10 条评价，按可信度、相关性、信息量、可读性、图文辅助和决策帮助打分。
+    output:
+      - 评价样本数量
+      - 高分评价共同点
+      - 低分评价共同点
+      - 可能被激励污染的信号
+      - 适合分发的评价标准
+      - 不适合分发的评价标准
+    pass_criteria:
+      - 输出不少于 5 条评价质量规则
+      - 能解释为什么某些评价不应高权重分发
+
+boss_level:
+  id: BOSS
+  name: 报告生成
+  perspective: 产品经理
+  badge: 新人体验设计师
+  estimated_minutes: 60
+  goal: 把 6 关素材合并成一份产品体验报告。
+  required_sections:
+    - 背景与体验范围
+    - 消费者看评链路观察
+    - 评价生产链路观察
+    - 创作者内容与评价的关系
+    - 商品评价 vs 地点评价
+    - 关键问题归因
+    - 产品机会点
+    - 后续待验证问题
