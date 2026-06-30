@@ -48,6 +48,13 @@ function getScoreLabel(score: number) {
   };
 }
 
+function getRankLabel(score: number) {
+  if (score >= 90) return "S";
+  if (score >= 80) return "A";
+  if (score >= 55) return "B";
+  return "C";
+}
+
 function getNextAction(score: number, hasReportCard: boolean, hasNextLevel: boolean) {
   if (score < 55) {
     return "继续填写体验记录，先补齐关键观察。";
@@ -154,6 +161,7 @@ export default function QuestPage() {
   const activeSubmission = getSubmission(state, activeLevel.id);
   const activeScore = scoreSubmission(activeLevel, activeSubmission);
   const scoreCopy = getScoreLabel(activeScore);
+  const activeRank = getRankLabel(activeScore);
   const activeLevelIndex = levels.findIndex((level) => level.id === activeLevel.id);
   const nextLevel = levels[activeLevelIndex + 1];
   const canAdvance = activeScore >= 80;
@@ -260,30 +268,47 @@ export default function QuestPage() {
     <div className="app-shell">
       <header className="topbar">
         <div>
-          <div className="eyebrow">Life Service Onboarding Quest</div>
+          <div className="eyebrow">Quest Board / 新人训练副本</div>
           <h1>生活服务新人闯关训练</h1>
+        </div>
+        <div className="hero-stats" aria-label="当前闯关状态">
+          <div>
+            <span>当前等级</span>
+            <strong>{activeLevel.id}</strong>
+          </div>
+          <div>
+            <span>训练 XP</span>
+            <strong>{activeScore}/100</strong>
+          </div>
+          <div>
+            <span>完成进度</span>
+            <strong>{percent}%</strong>
+          </div>
         </div>
       </header>
 
       <section className="status-band">
         <div>
-          <span className="status-label">主题</span>
+          <span className="status-label">主线任务</span>
           <strong>抖音生活服务评价生产与看评消费体验</strong>
         </div>
         <div>
-          <span className="status-label">完成</span>
+          <span className="status-label">通关</span>
           <strong>{completedCount}/{levels.length}</strong>
         </div>
         <div>
-          <span className="status-label">当前徽章</span>
+          <span className="status-label">徽章</span>
           <strong>{activeLevel.badge}</strong>
         </div>
         <div>
-          <span className="status-label">当前下一步</span>
+          <span className="status-label">下一步指令</span>
           <strong>{nextAction}</strong>
         </div>
-        <div className="progress-track" aria-label="完成进度">
-          <div style={{ width: `${percent}%` }} />
+        <div className="progress-cell">
+          <span className="status-label">副本进度</span>
+          <div className="progress-track" aria-label="完成进度">
+            <div style={{ width: `${percent}%` }} />
+          </div>
         </div>
       </section>
 
@@ -291,24 +316,26 @@ export default function QuestPage() {
         <nav className="level-map" aria-label="关卡地图">
           <div className="panel-heading">
             <h2>闯关地图</h2>
-            <span>标准版</span>
+            <span>6 个任务点</span>
           </div>
           <div className="level-list">
             {levels.map((level, index) => {
               const completed = isComplete(level, state.submissions[level.id]);
+              const active = level.id === state.activeLevelId;
               return (
                 <button
-                  className={`level-item ${level.id === state.activeLevelId ? "active" : ""}`}
+                  className={`level-item ${active ? "active" : ""} ${completed ? "completed" : ""}`}
                   type="button"
                   key={level.id}
                   onClick={() => switchLevel(level.id)}
+                  aria-current={active ? "step" : undefined}
                 >
-                  <span className="level-index">{index + 1}</span>
+                  <span className="level-index">LV{index + 1}</span>
                   <span>
                     <strong>{level.name}</strong>
                     <small>{level.perspective} · {level.estimatedMinutes} 分钟</small>
                   </span>
-                  <span className="level-state">{completed ? "已完成" : "未完成"}</span>
+                  <span className="level-state">{completed ? "CLEAR" : active ? "ACTIVE" : "OPEN"}</span>
                 </button>
               );
             })}
@@ -318,7 +345,7 @@ export default function QuestPage() {
         <section className="task-panel">
           <div className="task-header">
             <div>
-              <span className="pill">{activeLevel.id} · {activeLevel.perspective} · {activeLevel.estimatedMinutes} 分钟</span>
+              <span className="pill">MISSION {activeLevel.id} · {activeLevel.perspective} · {activeLevel.estimatedMinutes} 分钟</span>
               <h2>{activeLevel.name}</h2>
             </div>
             <button className="primary-button" type="button" onClick={saveProgress}>
@@ -377,10 +404,13 @@ export default function QuestPage() {
         <aside className="coach-panel">
           <div className="panel-heading">
             <h2>教练面板</h2>
-            <span>{activeScore} 分</span>
+            <span>RANK {activeRank}</span>
           </div>
           <div className="score-box">
-            <div className="score-ring" style={scoreRingStyle}>{activeScore}</div>
+            <div className="score-ring" style={scoreRingStyle}>
+              <span>{activeRank}</span>
+              <small>{activeScore}</small>
+            </div>
             <div>
               <strong>{scoreCopy.label}</strong>
               <p>{scoreCopy.hint}</p>
