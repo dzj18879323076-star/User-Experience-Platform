@@ -10,11 +10,7 @@
 - PDE 执行手册：`docs/PDE_PLAYBOOK.md`
 - Git 工作流：`docs/GIT_WORKFLOW.md`
 - 工作指南：`docs/WORKING_GUIDE.md`
-- Skill 推荐复盘：`docs/SKILL_RECOMMENDATION_RETRO.md`
 - Next.js Web MVP：`app/page.tsx`
-- 游戏化 UI 原型：`public/prototype/prototype.html`
-- A+C 融合版原型：`/prototype/prototype.html?variant=D`
-- 融合版设计说明：`docs/FUSED_GAME_UI_DIRECTION.md`
 
 ## 你现在要做哪一步？
 
@@ -94,6 +90,5 @@
 
 - 把关卡提交模板做成表格或飞书多维表。
 - 设计 leader 评阅页。
-- 做一个 Web 原型或妙搭应用。
 - 把 AI Game Master 接入飞书机器人。
 - 沉淀优秀样本库和反例库。

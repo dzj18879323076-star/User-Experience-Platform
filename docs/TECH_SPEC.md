@@ -20,8 +20,7 @@ flowchart LR
     B --> D["lib/quest.ts"]
     D --> E["关卡配置与评分规则"]
     B --> F["localStorage"]
-    B --> G["Markdown/JSON 导出"]
-    H["public/prototype/"] --> I["游戏化 UI 原型"]
+    B --> G["Markdown 报告生成与复制"]
 ```
 
 ## 3. 文件结构
@@ -34,11 +33,6 @@ flowchart LR
     globals.css
   lib/
     quest.ts
-  public/
-    prototype/
-      prototype.html
-      prototype.css
-      prototype.js
   docs/
     PRD.md
     TECH_SPEC.md
@@ -209,5 +203,3 @@ MVP 暂不做自动同步，避免权限和多人协作复杂度影响验证。
    - 刷新后数据保留。
    - 阶段汇报卡可生成和复制。
    - Markdown 报告可生成和复制。
-   - JSON 可导出。
-   - 清空本地数据前有确认弹窗。

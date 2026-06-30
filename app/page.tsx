@@ -115,29 +115,6 @@ ${sections.join("\n")}
 `;
 }
 
-function importTrialOneDemoState(): AppState {
-  return {
-    activeLevelId: "L1",
-    submissions: {
-      L1: {
-        levelId: "L1",
-        updatedAt: new Date().toISOString(),
-        values: {
-          消费需求: "周末和女朋友去哪儿吃喝玩乐",
-          入口: "小红书 App、大众点评 App、抖音 App",
-          完整路径:
-            "先在小红书搜索上海周末去哪儿，寻找市集、快闪、公园、商场等周末去处；再打开大众点评和抖音搜索去处周边餐厅，比较餐厅方向、均价、评价和团购；最后到具体 POI 消费或体验，并对照线上信息是否符合预期。",
-          关键决策节点:
-            "1. 被小红书种草周末去处；2. 在大众点评、抖音获取更具体的 POI 信息和评价，比对交易服务；3. 到现场验证线上信息是否准确。",
-          评价出现位置: "评价主要出现在大众点评和抖音的 POI 详情页。",
-          最大卡点: "抖音从种草内容到 POI、评价、团购和交易供给的连接弱。内容可能不挂 POI 锚点，用户需要记地点、二次搜索，甚至主动切到团购 tab。",
-          产品机会: "提升生活服务内容的 POI 锚点挂载率和准确率；补充周末活动/目的地供给；优化内容到 POI、评价、团购和收藏/规划的转化链路。"
-        }
-      }
-    }
-  };
-}
-
 export default function QuestPage() {
   const [state, setState] = useState<AppState>(() => cloneDefaultState());
   const [isHydrated, setIsHydrated] = useState(false);
@@ -248,31 +225,6 @@ export default function QuestPage() {
     setAutosaveText("报告已复制");
   }
 
-  function exportJson() {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `onboarding-quest-${Date.now()}.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function importDemo() {
-    const nextState = importTrialOneDemoState();
-    setState(nextState);
-    const level = levels[0];
-    setReportCard(buildReportCard(level, nextState.submissions.L1));
-  }
-
-  function resetData() {
-    if (!window.confirm("确认清空本地闯关数据？")) return;
-    window.localStorage.removeItem(storageKey);
-    setState(cloneDefaultState());
-    setReportCard("");
-    setReportOutput("");
-  }
-
   const scoreRingStyle: CSSProperties = {
     background: `conic-gradient(var(--accent) ${activeScore * 3.6}deg, #d9e2e8 0deg)`
   };
@@ -283,20 +235,6 @@ export default function QuestPage() {
         <div>
           <div className="eyebrow">Life Service Onboarding Quest</div>
           <h1>生活服务新人闯关训练</h1>
-        </div>
-        <div className="top-actions">
-          <button className="icon-button" type="button" title="导入关卡一试跑样例" aria-label="导入关卡一试跑样例" onClick={importDemo}>
-            +
-          </button>
-          <button className="icon-button" type="button" title="复制报告草稿" aria-label="复制报告草稿" onClick={copyReport}>
-            ⧉
-          </button>
-          <button className="icon-button" type="button" title="导出 JSON" aria-label="导出 JSON" onClick={exportJson}>
-            ⇩
-          </button>
-          <button className="icon-button danger" type="button" title="清空本地数据" aria-label="清空本地数据" onClick={resetData}>
-            ⌫
-          </button>
         </div>
       </header>
 
@@ -432,9 +370,14 @@ export default function QuestPage() {
           <div className="report-panel">
             <div className="panel-heading compact">
               <h2>报告草稿</h2>
-              <button className="text-button" type="button" onClick={generateFullReport}>
-                生成
-              </button>
+              <div className="inline-actions">
+                <button className="text-button" type="button" onClick={generateFullReport}>
+                  生成
+                </button>
+                <button className="text-button" type="button" onClick={copyReport}>
+                  复制
+                </button>
+              </div>
             </div>
             <textarea readOnly value={reportOutput} placeholder="完成关卡后生成 Markdown 报告草稿" />
           </div>

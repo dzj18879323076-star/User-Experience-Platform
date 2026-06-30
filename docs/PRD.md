@@ -123,7 +123,6 @@ MVP 使用浏览器 `localStorage` 存储用户提交。
 
 - 自动保存
 - 清空数据
-- 导出 JSON
 - 导出 Markdown 报告
 
 ## 7. 评分规则

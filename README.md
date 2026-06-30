@@ -21,7 +21,6 @@
 - `app/`：Next.js App Router 主应用
 - `lib/quest.ts`：关卡数据、评分和报告生成的核心类型/逻辑
 - `config/levels.yaml`：结构化关卡配置草案
-- `public/prototype/`：游戏化 UI 原型
 - `templates/experience_report_outline.md`：最终体验报告模板
 
 ## 使用方式
