@@ -198,7 +198,7 @@ h3 {
   max-width: 1480px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 360px;
+  grid-template-columns: 230px minmax(0, 1fr) 380px;
   gap: 16px;
   align-items: start;
 }
@@ -318,6 +318,305 @@ h3 {
 .task-panel {
   display: grid;
   gap: 14px;
+}
+
+.city-stage {
+  min-height: 520px;
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(23, 32, 38, .92), rgba(32, 62, 62, .9)),
+    linear-gradient(135deg, rgba(242, 184, 75, .2), rgba(15, 139, 141, .16));
+  border: 1px solid rgba(255, 243, 201, .24);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.city-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, transparent 0 88%, rgba(242, 184, 75, .08) 88% 89%, transparent 89%),
+    repeating-linear-gradient(135deg, transparent 0 18px, rgba(255, 255, 255, .04) 18px 19px);
+  pointer-events: none;
+}
+
+.city-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  position: relative;
+  z-index: 2;
+  color: #fffdf6;
+}
+
+.scene-kicker {
+  display: block;
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.city-header h2 {
+  font-size: 24px;
+}
+
+.scene-status {
+  min-width: 180px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 253, 246, .18);
+  border-radius: 8px;
+  background: rgba(255, 253, 246, .08);
+  text-align: right;
+}
+
+.scene-status span {
+  display: block;
+  color: rgba(255, 253, 246, .68);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.scene-status strong {
+  color: var(--gold);
+}
+
+.city-map {
+  height: 430px;
+  margin-top: 16px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 243, 201, .18);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, .06) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(255, 255, 255, .06) 1px, transparent 1px),
+    linear-gradient(145deg, #928b64, #b7a771 42%, #817456 100%);
+  background-size: 34px 34px, 34px 34px, auto;
+  box-shadow: inset 0 0 70px rgba(23, 32, 38, .38);
+}
+
+.city-ground {
+  position: absolute;
+  left: 5%;
+  right: 5%;
+  top: 12%;
+  bottom: 8%;
+  background:
+    linear-gradient(90deg, transparent 0 48%, rgba(255, 253, 246, .22) 48% 52%, transparent 52%),
+    linear-gradient(0deg, transparent 0 48%, rgba(255, 253, 246, .2) 48% 52%, transparent 52%),
+    linear-gradient(135deg, rgba(118, 141, 82, .52), rgba(177, 154, 98, .62));
+  border: 2px solid rgba(57, 48, 35, .36);
+  border-radius: 8px;
+  transform: skewY(-7deg);
+}
+
+.city-plaza {
+  position: absolute;
+  left: 39%;
+  top: 39%;
+  width: 22%;
+  height: 18%;
+  background:
+    repeating-linear-gradient(45deg, rgba(255, 253, 246, .22) 0 9px, rgba(23, 32, 38, .08) 9px 18px),
+    #b9aa7b;
+  border: 2px solid rgba(57, 48, 35, .38);
+  border-radius: 8px;
+  transform: skewY(-7deg);
+  box-shadow: 0 14px 28px rgba(23, 32, 38, .22);
+}
+
+.city-road {
+  position: absolute;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 253, 246, .18) 0 18px, transparent 18px 36px),
+    #6d6658;
+  border: 1px solid rgba(23, 32, 38, .28);
+  box-shadow: inset 0 0 0 2px rgba(255, 253, 246, .08);
+}
+
+.road-main {
+  left: -5%;
+  top: 49%;
+  width: 112%;
+  height: 38px;
+  transform: rotate(-7deg);
+}
+
+.road-cross {
+  left: 48%;
+  top: 7%;
+  width: 38px;
+  height: 88%;
+  transform: rotate(18deg);
+}
+
+.road-diagonal-one {
+  left: 15%;
+  top: 19%;
+  width: 72%;
+  height: 28px;
+  transform: rotate(30deg);
+  opacity: .82;
+}
+
+.road-diagonal-two {
+  left: 9%;
+  top: 68%;
+  width: 78%;
+  height: 28px;
+  transform: rotate(-27deg);
+  opacity: .82;
+}
+
+.city-building {
+  --building-main: #7c4a2f;
+  --building-roof: #d19943;
+  width: 118px;
+  min-height: 128px;
+  padding: 0;
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: #fffdf6;
+  text-align: center;
+  transform: translate(-50%, -50%);
+  transition: transform .18s ease, filter .18s ease, opacity .18s ease;
+}
+
+.city-building:hover,
+.city-building.active {
+  transform: translate(-50%, -54%);
+  filter: saturate(1.16) drop-shadow(0 18px 20px rgba(23, 32, 38, .34));
+}
+
+.city-building:not(.active):not(.completed) {
+  opacity: .78;
+}
+
+.city-building.completed {
+  filter: drop-shadow(0 12px 18px rgba(46, 125, 91, .2));
+}
+
+.city-building.active .building-art {
+  box-shadow: 0 0 0 4px rgba(242, 184, 75, .22), 0 0 30px rgba(242, 184, 75, .45);
+}
+
+.building-level {
+  min-width: 36px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: #172026;
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 900;
+  box-shadow: inset 0 0 0 1px rgba(242, 184, 75, .36);
+}
+
+.building-art {
+  width: 76px;
+  height: 76px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(23, 32, 38, .22);
+  transition: box-shadow .18s ease;
+}
+
+.building-roof {
+  width: 68px;
+  height: 28px;
+  position: absolute;
+  top: 8px;
+  background: var(--building-roof);
+  clip-path: polygon(50% 0, 100% 72%, 88% 100%, 12% 100%, 0 72%);
+  box-shadow: inset 0 -5px 0 rgba(23, 32, 38, .16);
+}
+
+.building-body {
+  width: 54px;
+  height: 48px;
+  position: absolute;
+  bottom: 8px;
+  background:
+    linear-gradient(90deg, rgba(255, 253, 246, .18) 1px, transparent 1px),
+    var(--building-main);
+  background-size: 15px 100%, auto;
+  border: 2px solid rgba(23, 32, 38, .3);
+  border-radius: 4px 4px 8px 8px;
+}
+
+.building-door {
+  width: 16px;
+  height: 22px;
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  background: #172026;
+  border-radius: 4px 4px 0 0;
+}
+
+.building-label {
+  min-width: 106px;
+  padding: 5px 8px;
+  display: grid;
+  gap: 1px;
+  border: 1px solid rgba(255, 243, 201, .24);
+  border-radius: 6px;
+  background: rgba(23, 32, 38, .82);
+  box-shadow: 0 8px 16px rgba(23, 32, 38, .24);
+}
+
+.building-label strong {
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.building-label small {
+  color: var(--gold);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.city-building.gate {
+  --building-main: #8a4d32;
+  --building-roof: #d64b2f;
+}
+
+.city-building.court {
+  --building-main: #5d5f79;
+  --building-roof: #d9b24d;
+}
+
+.city-building.workshop {
+  --building-main: #8c6a38;
+  --building-roof: #c45f35;
+}
+
+.city-building.tower {
+  --building-main: #4f6f82;
+  --building-roof: #f2b84b;
+}
+
+.city-building.guild {
+  --building-main: #73533b;
+  --building-roof: #0f8b8d;
+}
+
+.city-building.lighthouse {
+  --building-main: #6e6a82;
+  --building-roof: #e9d46a;
 }
 
 .task-header {
@@ -495,6 +794,35 @@ h3 {
   color: #fffdf6;
 }
 
+.command-brief {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid rgba(23, 32, 38, .14);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, var(--gold-soft), #fffdf6),
+    linear-gradient(90deg, rgba(15, 139, 141, .12), transparent);
+}
+
+.command-brief span {
+  display: block;
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.command-brief strong {
+  display: block;
+  font-size: 18px;
+}
+
+.command-brief p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .coach-actions {
   display: grid;
   grid-template-columns: 1fr 118px;
@@ -615,7 +943,7 @@ h3 {
   }
 
   .workspace {
-    grid-template-columns: 240px minmax(0, 1fr);
+    grid-template-columns: 220px minmax(0, 1fr);
   }
 
   .coach-panel {
@@ -641,6 +969,59 @@ h3 {
 
   .hero-stats {
     grid-template-columns: 1fr;
+  }
+
+  .city-stage {
+    min-height: 430px;
+    padding: 12px;
+  }
+
+  .city-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .scene-status {
+    min-width: 0;
+    text-align: left;
+  }
+
+  .city-map {
+    height: 320px;
+  }
+
+  .city-building {
+    width: 88px;
+    min-height: 110px;
+  }
+
+  .building-art {
+    width: 58px;
+    height: 58px;
+  }
+
+  .building-roof {
+    width: 52px;
+    height: 22px;
+  }
+
+  .building-body {
+    width: 42px;
+    height: 36px;
+  }
+
+  .building-door {
+    width: 12px;
+    height: 17px;
+  }
+
+  .building-label {
+    min-width: 82px;
+    padding: 4px 5px;
+  }
+
+  .building-label strong {
+    font-size: 11px;
   }
 
   .status-band,

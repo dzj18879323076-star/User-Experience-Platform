@@ -15,6 +15,24 @@ import {
   storageKey
 } from "../lib/quest";
 
+type CityBuilding = {
+  levelId: string;
+  name: string;
+  district: string;
+  className: string;
+  x: number;
+  y: number;
+};
+
+const cityBuildings: CityBuilding[] = [
+  { levelId: "L1", name: "城门街区", district: "找店迷宫", className: "gate", x: 13, y: 63 },
+  { levelId: "L2", name: "评审殿", district: "看评裁判所", className: "court", x: 32, y: 36 },
+  { levelId: "L3", name: "交易工坊", district: "团购商品实验室", className: "workshop", x: 53, y: 61 },
+  { levelId: "L4", name: "影像塔", district: "创作者通道", className: "tower", x: 70, y: 30 },
+  { levelId: "L5", name: "商会", district: "商家镜像", className: "guild", x: 78, y: 67 },
+  { levelId: "L6", name: "分发灯塔", district: "平台分发台", className: "lighthouse", x: 47, y: 18 }
+];
+
 function loadStoredState(): AppState {
   try {
     const raw = window.localStorage.getItem(storageKey);
@@ -53,6 +71,10 @@ function getRankLabel(score: number) {
   if (score >= 80) return "A";
   if (score >= 55) return "B";
   return "C";
+}
+
+function getBuilding(levelId: string) {
+  return cityBuildings.find((building) => building.levelId === levelId) || cityBuildings[0];
 }
 
 function getNextAction(score: number, hasReportCard: boolean, hasNextLevel: boolean) {
@@ -164,6 +186,7 @@ export default function QuestPage() {
   const activeRank = getRankLabel(activeScore);
   const activeLevelIndex = levels.findIndex((level) => level.id === activeLevel.id);
   const nextLevel = levels[activeLevelIndex + 1];
+  const activeBuilding = getBuilding(activeLevel.id);
   const canAdvance = activeScore >= 80;
   const completedCount = levels.filter((level) => isComplete(level, state.submissions[level.id])).length;
   const percent = Math.round((completedCount / levels.length) * 100);
@@ -343,6 +366,54 @@ export default function QuestPage() {
         </nav>
 
         <section className="task-panel">
+          <section className="city-stage" aria-label="生活服务城场景地图">
+            <div className="city-header">
+              <div>
+                <span className="scene-kicker">Life Service City</span>
+                <h2>生活服务城</h2>
+              </div>
+              <div className="scene-status">
+                <span>{activeBuilding.name}</span>
+                <strong>{activeLevel.name}</strong>
+              </div>
+            </div>
+            <div className="city-map">
+              <div className="city-ground" />
+              <div className="city-road road-main" />
+              <div className="city-road road-cross" />
+              <div className="city-road road-diagonal-one" />
+              <div className="city-road road-diagonal-two" />
+              <div className="city-plaza" />
+              {cityBuildings.map((building) => {
+                const level = levels.find((item) => item.id === building.levelId) || levels[0];
+                const completed = isComplete(level, state.submissions[level.id]);
+                const active = building.levelId === activeLevel.id;
+                return (
+                  <button
+                    className={`city-building ${building.className} ${active ? "active" : ""} ${completed ? "completed" : ""}`}
+                    key={building.levelId}
+                    style={{ left: `${building.x}%`, top: `${building.y}%` }}
+                    type="button"
+                    onClick={() => switchLevel(building.levelId)}
+                    aria-label={`${building.name}：${level.name}`}
+                  >
+                    <span className="building-level">{building.levelId}</span>
+                    <span className="building-art" aria-hidden="true">
+                      <span className="building-roof" />
+                      <span className="building-body">
+                        <span className="building-door" />
+                      </span>
+                    </span>
+                    <span className="building-label">
+                      <strong>{building.name}</strong>
+                      <small>{completed ? "CLEAR" : active ? "ACTIVE" : "OPEN"}</small>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
           <div className="task-header">
             <div>
               <span className="pill">MISSION {activeLevel.id} · {activeLevel.perspective} · {activeLevel.estimatedMinutes} 分钟</span>
@@ -403,8 +474,13 @@ export default function QuestPage() {
 
         <aside className="coach-panel">
           <div className="panel-heading">
-            <h2>教练面板</h2>
+            <h2>任务指挥所</h2>
             <span>RANK {activeRank}</span>
+          </div>
+          <div className="command-brief">
+            <span>当前建筑</span>
+            <strong>{activeBuilding.name}</strong>
+            <p>{activeBuilding.district}</p>
           </div>
           <div className="score-box">
             <div className="score-ring" style={scoreRingStyle}>
