@@ -1351,6 +1351,41 @@ h3 {
   }
 }
 
+@media (max-width: 900px) {
+  .workspace {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .coach-panel {
+    order: 1;
+  }
+
+  .task-panel {
+    order: 2;
+  }
+
+  .level-map {
+    order: 3;
+  }
+
+  .city-stage {
+    order: 9;
+  }
+
+  .task-header {
+    order: 1;
+  }
+
+  .backend-status {
+    order: 2;
+  }
+
+  .task-card {
+    order: 3;
+  }
+}
+
 @media (max-width: 760px) {
   .app-shell {
     padding: 12px;
@@ -1370,6 +1405,12 @@ h3 {
     flex: 1 1 150px;
   }
 
+  .primary-button,
+  .secondary-button,
+  .ghost-button {
+    min-height: 42px;
+  }
+
   .backend-status,
   .backend-status dl {
     grid-template-columns: 1fr;
@@ -1387,6 +1428,10 @@ h3 {
   .city-stage {
     min-height: 430px;
     padding: 12px;
+  }
+
+  .task-card {
+    padding: 14px;
   }
 
   .city-header {
@@ -1455,6 +1500,27 @@ h3 {
     font-size: 19px;
   }
 
+  .guide-profile p,
+  .guide-context p {
+    font-size: 12px;
+  }
+
+  .guide-messages {
+    max-height: 260px;
+  }
+
+  .guide-message {
+    max-width: 100%;
+  }
+
+  .guide-input-row {
+    grid-template-columns: 1fr;
+  }
+
+  .guide-input-row input {
+    height: 44px;
+  }
+
   .guide-quick-actions {
     grid-template-columns: 1fr;
   }
@@ -1465,5 +1531,126 @@ h3 {
 
   h1 {
     font-size: 26px;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-shell {
+    padding: 8px;
+  }
+
+  .topbar,
+  .status-band,
+  .level-map,
+  .coach-panel,
+  .task-card,
+  .city-stage {
+    border-radius: 8px;
+  }
+
+  .topbar {
+    padding: 16px;
+  }
+
+  .status-band {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .workspace {
+    gap: 10px;
+  }
+
+  .level-map,
+  .coach-panel {
+    padding: 12px;
+  }
+
+  .panel-heading,
+  .section-title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .guide-card {
+    grid-template-columns: 78px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .guide-avatar-frame {
+    width: 78px;
+    height: 98px;
+  }
+
+  .guide-profile strong {
+    font-size: 18px;
+  }
+
+  .guide-meta span {
+    min-height: 22px;
+    padding: 4px 7px;
+  }
+
+  .guide-chat {
+    padding: 8px;
+  }
+
+  .guide-messages {
+    max-height: 230px;
+  }
+
+  .city-stage {
+    min-height: 360px;
+  }
+
+  .city-header h2 {
+    font-size: 20px;
+  }
+
+  .city-map {
+    height: 250px;
+  }
+
+  .city-building {
+    width: 70px;
+    min-height: 92px;
+  }
+
+  .building-art {
+    width: 48px;
+    height: 48px;
+  }
+
+  .building-roof {
+    width: 44px;
+    height: 18px;
+  }
+
+  .building-body {
+    width: 34px;
+    height: 30px;
+  }
+
+  .building-label {
+    min-width: 66px;
+    padding: 3px 4px;
+  }
+
+  .building-label strong {
+    font-size: 10px;
+  }
+
+  .building-label small,
+  .building-level {
+    font-size: 10px;
+  }
+
+  .field textarea {
+    min-height: 100px;
+  }
+
+  .artifact-heading {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
