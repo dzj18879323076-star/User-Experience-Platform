@@ -1,3 +1,15 @@
+# Netlify configuration for Next.js App Router
+# https://ntl.fyi/netlify.toml
+
 [build]
   command = "npm run build"
   publish = ".next"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/api/:splat"
+  status = 200
+
+[[edge_functions]]
+  function = "next-edges"
+  path = "/api/*"
