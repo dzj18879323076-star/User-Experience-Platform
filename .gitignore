@@ -20,6 +20,7 @@ coverage/
 # Local environment and secrets
 .env
 .env.*
+!.env.local.example
 *.pem
 *.key
 *.p12
@@ -35,3 +36,6 @@ exports/
 # Do not migrate machine-local profile or package mirrors
 %APPDATA%/
 landing_materials_review/
+
+# Local Netlify folder
+.netlify

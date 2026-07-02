@@ -7,8 +7,8 @@
 当前实现采用 Next.js App Router：
 
 - 前端框架：Next.js + React + TypeScript。
-- 暂不接后端。
-- 数据仍存在浏览器 `localStorage`。
+- 后端接口：Next.js Route Handlers。
+- 数据持久化：浏览器 `localStorage` 作为本地 fallback，后端通过 PostgreSQL session pool 写入 Supabase。
 - 关卡、评分、汇报卡和报告生成逻辑集中在本地代码中。
 
 ## 2. 架构
@@ -20,6 +20,9 @@ flowchart LR
     B --> D["lib/quest.ts"]
     D --> E["关卡配置与评分规则"]
     B --> F["localStorage"]
+    B --> H["app/api/quest/save"]
+    H --> I["PostgreSQL session pool"]
+    I --> J["Supabase quest_* tables"]
     B --> G["Markdown 报告生成与复制"]
 ```
 
@@ -28,11 +31,18 @@ flowchart LR
 ```text
 用户体验平台/
   app/
+    api/
+      quest/
+        save/route.ts
+        sessions/[sessionId]/route.ts
     layout.tsx
     page.tsx
     globals.css
   lib/
     quest.ts
+    server/
+      db.ts
+      questRepository.ts
   docs/
     PRD.md
     TECH_SPEC.md
@@ -111,13 +121,38 @@ type AppState = {
 
 ### 5.3 自动保存
 
-用户输入后写入 `localStorage`。
+用户输入后仍写入 `localStorage`，用于刷新恢复和后端失败时的本地 fallback。
 
 key 保持不变，避免迁移框架后丢失浏览器已有数据：
 
 ```text
 life_service_onboarding_quest_state_v1
 ```
+
+用户点击「保存并验证入库」后，前端调用 `POST /api/quest/save`，由服务端通过 `DATABASE_URL` 创建 PostgreSQL 连接池并写入 Supabase：
+
+- `quest_sessions`：匿名训练会话。
+- `quest_level_submissions`：每个会话每关一条提交记录。
+- `quest_submission_fields`：当前关卡字段值，按字段 upsert。
+- `quest_report_artifacts`：阶段汇报卡和最终报告草稿。
+
+后端返回 `sessionId`、`savedFieldCount`、`savedAt` 和 `verified`。前端把 `sessionId` 存入：
+
+```text
+life_service_onboarding_quest_session_id_v1
+```
+
+后续同一浏览器继续保存时复用这个匿名会话。
+
+后端配置健康检查由 `GET /api/quest/health` 提供，只返回是否配置了数据库连接：
+
+```json
+{
+  "databaseConfigured": true
+}
+```
+
+本地开发必须复制 `.env.local.example` 为 `.env.local`，并把 `DATABASE_URL` 设置为 Supabase PostgreSQL session pooler 连接串。真实连接串不得提交到仓库，也不应出现在前端代码、聊天记录或文档中。
 
 ### 5.4 评分
 
@@ -130,15 +165,17 @@ MVP 使用规则评分：
 
 后续替换为 AI Game Master API。
 
-### 5.5 阶段汇报卡生成
+### 5.5 NPC / Agent 引导
 
-MVP 规则模板：
+右侧教练面板升级为 Game Master / NPC 教练：
 
-- 抽取用户填写的前几项作为证据。
-- 根据缺失字段给建议。
-- 根据关卡 pass criteria 给下一步。
+- 虚拟形象：使用「阿引」插画头像作为固定 Game Master 向导，展示当前 provider 和处理状态。
+- 空白状态：解释当前关卡目标，提示优先填写字段。
+- 问答中：用户通过输入框直接向「阿引」提问，后端按 `guide_chat` 模式回答。
+- 保存入库后：生成本关导师点评、过关判断和下一关建议。
+- 多关完成后：生成 Markdown 体验报告草稿。
 
-后续由 LLM 根据 Prompt 生成。
+后端通过 `POST /api/quest/coach` 生成 Agent 产物。默认 provider 为 `rules`，不外发用户填写内容；只有显式设置 `QUEST_AGENT_PROVIDER=agnes` 或 `QUEST_AGENT_PROVIDER=openai` 且配置对应后端密钥时，服务端才调用外部模型。模型调用失败、额度不足、超时或返回格式不合法时，自动回退规则 Agent，并在响应里返回 `fallbackReason`。
 
 ### 5.6 报告生成
 
@@ -146,25 +183,37 @@ MVP 规则模板：
 
 支持复制到剪贴板。
 
-## 6. AI 接入预留
+## 6. AI 接入
 
-未来增加接口：
+当前已预留混合 Agent：
 
 ```ts
-async function askGameMaster(level, submission) {
-  return {
-    followUpQuestions: [],
-    score: 0,
-    reportCard: ""
-  };
-}
+type QuestCoachMode = "pre_submit_hint" | "field_followup" | "post_submit_review" | "final_report" | "guide_chat";
+
+type QuestCoachRequest = {
+  mode: QuestCoachMode;
+  userQuestion?: string;
+};
+
+type QuestCoachResponse = {
+  roleName: string;
+  messageMarkdown: string;
+  followUpQuestions: string[];
+  nextAction: string;
+  reportMarkdown?: string;
+  provider: "rules" | "openai" | "agnes";
+  fallbackReason?: string;
+};
 ```
 
 可接入：
 
-- OpenAI API
-- 飞书机器人
-- 内部大模型服务
+- 默认规则 Agent：本地生成提示、追问、点评和报告草稿。
+- Agnes OpenAI-compatible Chat Completions：设置 `QUEST_AGENT_PROVIDER=agnes`、`AGNES_API_KEY`、`AGNES_BASE_URL`、`AGNES_MODEL` 后启用，优先调用，失败时自动回退规则 Agent。
+- OpenAI Responses API：显式配置后启用，失败时自动回退规则 Agent。
+- 内部大模型服务：后续可复用 `questCoachService` 的 provider 分发方式。
+
+密钥只允许放在 `.env.local` 或部署环境变量中，不写入仓库、文档、前端代码或聊天记录。
 
 ## 7. 飞书集成预留
 
