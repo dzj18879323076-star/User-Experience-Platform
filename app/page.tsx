@@ -1211,19 +1211,9 @@ export default function QuestPage() {
           <section className="coach-console">
             <div className="coach-console-header">
               <div className="xiaoping-profile">
-                <div className="xiaoping-avatar" aria-hidden="true">
-                  <span className="avatar-ear left" />
-                  <span className="avatar-ear right" />
-                  <span className="avatar-star" />
-                  <span className="avatar-face">
-                    <i className="avatar-eye left" />
-                    <i className="avatar-eye right" />
-                    <i className="avatar-nose" />
-                    <i className="avatar-smile" />
-                    <i className="avatar-cheek left" />
-                    <i className="avatar-cheek right" />
-                  </span>
-                  <span className="avatar-tail" />
+                <div className="xiaoping-avatar image-avatar" aria-hidden="true">
+                  <img src="/characters/xiaoping-guide-cat.jpeg" alt="" />
+                  <span className="avatar-orbit" />
                   <span className="avatar-badge">评</span>
                 </div>
                 <div>
@@ -1395,11 +1385,14 @@ export default function QuestPage() {
             ) : (
               <div className="mystery-box-card" aria-hidden="true">
                 <span className="mystery-box-glow" />
+                <span className="mystery-box-aura" />
                 <span className="mystery-box-lid" />
                 <span className="mystery-box-body" />
                 <span className="mystery-box-ribbon" />
+                <span className="mystery-box-lock">评</span>
                 <span className="mystery-box-spark one" />
                 <span className="mystery-box-spark two" />
+                <span className="mystery-box-spark three" />
               </div>
             )}
           </section>
@@ -1411,10 +1404,14 @@ export default function QuestPage() {
           <div className="reward-modal">
             <div className="reward-modal-hero" aria-hidden="true">
               <span className="mystery-box-glow" />
+              <span className="mystery-box-aura" />
               <span className="mystery-box-lid" />
               <span className="mystery-box-body" />
               <span className="mystery-box-ribbon" />
+              <span className="mystery-box-lock">评</span>
               <span className="honor-medal reward-modal-medal">评</span>
+              <span className="mystery-box-spark one" />
+              <span className="mystery-box-spark two" />
             </div>
             <span className="reward-badge">HONOR UNLOCKED</span>
             <h2>{getRewardHonorName(activeReward)}</h2>
