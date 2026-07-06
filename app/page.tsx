@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   AppState,
   Level,
@@ -60,6 +60,13 @@ type CoachMessage = {
   levelId?: string;
   provider?: CoachResponse["provider"];
   fallbackReason?: string;
+  attachments?: ImageAttachment[];
+};
+
+type ImageAttachment = {
+  id: string;
+  name: string;
+  dataUrl: string;
 };
 
 type LevelReward = {
@@ -442,6 +449,9 @@ export default function QuestPage() {
   const [reportOutput, setReportOutput] = useState("");
   const [coachInput, setCoachInput] = useState("");
   const [coachMessages, setCoachMessages] = useState<CoachMessage[]>([]);
+  const [pendingImages, setPendingImages] = useState<ImageAttachment[]>([]);
+  const [imageUploadError, setImageUploadError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [observationsExpanded, setObservationsExpanded] = useState(false);
   const [levelRewards, setLevelRewards] = useState<LevelReward[]>([]);
   const [pinnedRewardIds, setPinnedRewardIds] = useState<string[]>([]);
@@ -662,6 +672,65 @@ export default function QuestPage() {
     };
   }
 
+  function readImageAsDataUrl(file: File) {
+    return new Promise<ImageAttachment>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        resolve({
+          id: `image-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          name: file.name,
+          dataUrl: String(reader.result || "")
+        });
+      };
+      reader.onerror = () => reject(new Error("图片读取失败"));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleImageUpload(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (!files.length) return;
+
+    const availableSlots = Math.max(0, 4 - pendingImages.length);
+    if (!availableSlots) {
+      setImageUploadError("最多先放 4 张截图，发送后可继续上传。");
+      return;
+    }
+
+    const acceptedFiles = files
+      .filter((file) => file.type.startsWith("image/"))
+      .slice(0, availableSlots);
+
+    if (!acceptedFiles.length) {
+      setImageUploadError("请上传 PNG、JPG、WebP 等图片文件。");
+      return;
+    }
+
+    const oversized = acceptedFiles.find((file) => file.size > 2.5 * 1024 * 1024);
+    if (oversized) {
+      setImageUploadError("单张图片请控制在 2.5MB 内，避免对话记录过大。");
+      return;
+    }
+
+    try {
+      const nextImages = await Promise.all(acceptedFiles.map(readImageAsDataUrl));
+      setPendingImages((current) => [...current, ...nextImages]);
+      setImageUploadError(files.length > acceptedFiles.length ? "已添加部分图片；每轮最多 4 张。" : "");
+    } catch {
+      setImageUploadError("图片读取失败，请重新选择。");
+    }
+  }
+
+  function removePendingImage(imageId: string) {
+    setPendingImages((current) => current.filter((image) => image.id !== imageId));
+  }
+
+  function buildImageContext(images: ImageAttachment[]) {
+    if (!images.length) return "";
+    return `\n\n[本轮上传了 ${images.length} 张体验截图：${images.map((image) => image.name).join("、")}。请结合这些截图名称追问页面、评价样本、决策影响等证据。]`;
+  }
+
   function switchLevel(levelId: string) {
     updateState((current) => ({
       ...current,
@@ -812,11 +881,13 @@ export default function QuestPage() {
     }
   }
 
-  async function submitGuideQuestion(question: string, shouldCapture = true) {
+  async function submitGuideQuestion(question: string, shouldCapture = true, attachments: ImageAttachment[] = []) {
     const normalizedQuestion = question.trim();
-    if (!normalizedQuestion || coachState.status === "loading") return;
+    if ((!normalizedQuestion && !attachments.length) || coachState.status === "loading") return;
 
-    const captured = shouldCapture ? persistConversationObservation(normalizedQuestion) : undefined;
+    const displayQuestion = normalizedQuestion || "我上传了体验截图，请先帮我看图追问。";
+    const captureText = `${displayQuestion}${buildImageContext(attachments)}`;
+    const captured = shouldCapture ? persistConversationObservation(captureText) : undefined;
 
     setCoachMessages((current) => [
       ...current,
@@ -824,13 +895,14 @@ export default function QuestPage() {
         id: `user-${Date.now()}`,
         sender: "user",
         levelId: activeLevel.id,
-        text: normalizedQuestion
+        text: displayQuestion,
+        attachments
       }
     ]);
 
     try {
       await requestCoach("guide_chat", {
-        userQuestion: normalizedQuestion,
+        userQuestion: captureText,
         values: captured?.values,
         score: captured?.score,
         submissions: captured?.submissions
@@ -843,10 +915,13 @@ export default function QuestPage() {
   async function askGuide(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const question = coachInput.trim();
-    if (!question || coachState.status === "loading") return;
+    const imagesToSend = pendingImages;
+    if ((!question && !imagesToSend.length) || coachState.status === "loading") return;
 
     setCoachInput("");
-    await submitGuideQuestion(question, true);
+    setPendingImages([]);
+    setImageUploadError("");
+    await submitGuideQuestion(question, true, imagesToSend);
   }
 
   async function createFeishuDocument(markdown: string, title: string) {
@@ -984,6 +1059,8 @@ export default function QuestPage() {
     setState(nextState);
     setCoachMessages([]);
     setCoachInput("");
+    setPendingImages([]);
+    setImageUploadError("");
     setReportCard("");
     setReportOutput("");
     setReportCardStatus("尚未生成");
@@ -1235,6 +1312,16 @@ export default function QuestPage() {
                   <div className={`guide-message ${message.sender}`} key={message.id}>
                     <span>{message.sender === "user" ? "你" : coachState.roleName}</span>
                     <p>{message.text}</p>
+                    {message.attachments?.length ? (
+                      <div className="message-attachments" aria-label="已上传图片">
+                        {message.attachments.map((image) => (
+                          <figure key={image.id}>
+                            <img src={image.dataUrl} alt={image.name} />
+                            <figcaption>{image.name}</figcaption>
+                          </figure>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 ))}
                 {coachState.status === "loading" ? (
@@ -1255,13 +1342,43 @@ export default function QuestPage() {
               </div>
 
               <form className="conversation-input-row" onSubmit={askGuide}>
-                <textarea
-                  value={coachInput}
-                  onChange={(event) => setCoachInput(event.target.value)}
-                  placeholder="把体验过程直接写给小评：我从哪里进入、想完成什么、看到了哪些评价、哪里让我犹豫或决定下单……"
-                  disabled={coachState.status === "loading"}
-                />
-                <button className="primary-button" type="submit" disabled={!coachInput.trim() || coachState.status === "loading"}>
+                <div className="composer-stack">
+                  {pendingImages.length ? (
+                    <div className="pending-image-strip" aria-label="待发送图片">
+                      {pendingImages.map((image) => (
+                        <figure key={image.id}>
+                          <img src={image.dataUrl} alt={image.name} />
+                          <figcaption>{image.name}</figcaption>
+                          <button type="button" onClick={() => removePendingImage(image.id)} aria-label={`移除 ${image.name}`}>
+                            ×
+                          </button>
+                        </figure>
+                      ))}
+                    </div>
+                  ) : null}
+                  <textarea
+                    value={coachInput}
+                    onChange={(event) => setCoachInput(event.target.value)}
+                    placeholder="把体验过程直接写给小评：我从哪里进入、想完成什么、看到了哪些评价、哪里让我犹豫或决定下单……"
+                    disabled={coachState.status === "loading"}
+                  />
+                  <div className="composer-tools">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleImageUpload}
+                      disabled={coachState.status === "loading"}
+                      aria-label="上传体验截图"
+                    />
+                    <button className="image-upload-button" type="button" onClick={() => fileInputRef.current?.click()} disabled={coachState.status === "loading"}>
+                      上传图片
+                    </button>
+                    <small>{imageUploadError || "支持上传页面截图，小评会结合截图名称继续追问。"}</small>
+                  </div>
+                </div>
+                <button className="primary-button" type="submit" disabled={(!coachInput.trim() && !pendingImages.length) || coachState.status === "loading"}>
                   发送并沉淀
                 </button>
               </form>
