@@ -388,6 +388,34 @@ function buildMetricArtifacts(entries: FieldEntry[]) {
   return metrics;
 }
 
+function getRewardHonorName(reward: LevelReward) {
+  const honorMap: Record<string, string> = {
+    L1: "消费决策侦探勋章",
+    L2: "评价质量鉴定师勋章",
+    L3: "商品评价实验员勋章",
+    L4: "内容链路观察员勋章",
+    L5: "商家镜像分析师勋章",
+    L6: "分发规则探路者勋章"
+  };
+
+  return honorMap[reward.levelId] || `${reward.levelName}荣誉勋章`;
+}
+
+function canExportProblemList(reward: LevelReward) {
+  return ["L1", "L2", "L3", "L5"].includes(reward.levelId);
+}
+
+function canExportMetricMap(reward: LevelReward) {
+  return ["L2", "L4", "L5", "L6"].includes(reward.levelId);
+}
+
+function buildRewardArtifactMarkdown(reward: LevelReward, kind: "problems" | "metrics") {
+  const title = kind === "problems" ? "问题清单" : "指标地图";
+  const items = kind === "problems" ? reward.problems : reward.metrics;
+
+  return `# ${reward.levelId} ${reward.levelName}｜${title}\n\n## 虚拟荣誉\n\n${getRewardHonorName(reward)}\n\n## 输出说明\n\n本内容来自「抖音评价评分-用户体验平台」通关奖励，用于作为体验报告的过程副产物。最终仍需回到完整产品体验报告中讨论。\n\n## ${title}\n\n${items.map((item) => `- ${item}`).join("\n")}\n\n## 下一步\n\n- 继续补充真实路径、评价样本、决策影响和待验证指标。\n- 将本副产物合并到阶段小结或最终体验报告中。`;
+}
+
 function buildLevelReward(level: Level, state: AppState): LevelReward {
   const entries = getCurrentEntries(level, getSubmission(state, level.id));
 
@@ -931,6 +959,25 @@ export default function QuestPage() {
     return generateFullReportDocument();
   }
 
+  async function exportRewardArtifact(reward: LevelReward, kind: "problems" | "metrics") {
+    if (exportDocState.status === "creating") return;
+
+    const label = kind === "problems" ? "问题清单" : "指标地图";
+    const markdown = buildRewardArtifactMarkdown(reward, kind);
+
+    try {
+      const exportResult = await createFeishuDocument(markdown, `${reward.levelId}-${reward.levelName}-${label}`);
+      appendGuideMessage(buildExportResultMessage(`${reward.levelId} ${label}`, exportResult));
+      setAutosaveText(exportResult.status === "ready" ? `${label}飞书文档已创建` : `${label}已生成，飞书需手动复制`);
+    } catch (error) {
+      appendGuideMessage(error instanceof Error ? `${label}生成失败：${error.message}` : `${label}生成失败，请稍后再试。`);
+      setExportDocState({
+        status: "error",
+        message: error instanceof Error ? error.message : `${label}生成失败`
+      });
+    }
+  }
+
   function clearObservations() {
     const nextState = cloneDefaultState();
     openedLevelRef.current = {};
@@ -1167,11 +1214,16 @@ export default function QuestPage() {
                 <div className="xiaoping-avatar" aria-hidden="true">
                   <span className="avatar-ear left" />
                   <span className="avatar-ear right" />
+                  <span className="avatar-star" />
                   <span className="avatar-face">
                     <i className="avatar-eye left" />
                     <i className="avatar-eye right" />
+                    <i className="avatar-nose" />
                     <i className="avatar-smile" />
+                    <i className="avatar-cheek left" />
+                    <i className="avatar-cheek right" />
                   </span>
+                  <span className="avatar-tail" />
                   <span className="avatar-badge">评</span>
                 </div>
                 <div>
@@ -1308,32 +1360,32 @@ export default function QuestPage() {
           <section className="artifact-card reward-shelf-card">
             <div className="panel-heading compact">
               <h2>闯关奖励</h2>
-              <span>{pinnedRewards.length ? "已固定" : "通关后解锁"}</span>
+              <span>{pinnedRewards.length ? `${pinnedRewards.length} 枚勋章` : "神秘盒子"}</span>
             </div>
+            <p className="empty-copy">当某一关达成标准后，小评会用奖励弹窗解锁并固定。</p>
             {pinnedRewards.length ? (
               <div className="reward-shelf">
                 {pinnedRewards.map((reward) => (
                   <article className="reward-mini-card" key={reward.levelId}>
-                    <div>
-                      <strong>{reward.levelId} · {reward.levelName}</strong>
-                      <small>{formatTime(reward.unlockedAt)}</small>
+                    <div className="reward-mini-head">
+                      <span className="honor-medal" aria-hidden="true">评</span>
+                      <div>
+                        <strong>{getRewardHonorName(reward)}</strong>
+                        <small>{reward.levelId} · {reward.levelName} · {formatTime(reward.unlockedAt)}</small>
+                      </div>
                     </div>
-                    <section>
-                      <b>问题清单</b>
-                      <ul>
-                        {reward.problems.slice(0, 2).map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                    </section>
-                    <section>
-                      <b>指标地图</b>
-                      <ul>
-                        {reward.metrics.slice(0, 2).map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                    </section>
+                    <div className="reward-mini-actions">
+                      {canExportProblemList(reward) ? (
+                        <button className="ghost-button" type="button" onClick={() => void exportRewardArtifact(reward, "problems")} disabled={exportDocState.status === "creating"}>
+                          输出问题清单
+                        </button>
+                      ) : null}
+                      {canExportMetricMap(reward) ? (
+                        <button className="secondary-button" type="button" onClick={() => void exportRewardArtifact(reward, "metrics")} disabled={exportDocState.status === "creating"}>
+                          输出指标地图
+                        </button>
+                      ) : null}
+                    </div>
                     <button className="text-button" type="button" onClick={() => unpinReward(reward.levelId)}>
                       取消固定
                     </button>
@@ -1341,7 +1393,14 @@ export default function QuestPage() {
                 ))}
               </div>
             ) : (
-              <p className="empty-copy">本区不会常驻展示问题清单和指标地图；当某一关达成标准后，小评会用奖励弹窗解锁并固定。</p>
+              <div className="mystery-box-card" aria-hidden="true">
+                <span className="mystery-box-glow" />
+                <span className="mystery-box-lid" />
+                <span className="mystery-box-body" />
+                <span className="mystery-box-ribbon" />
+                <span className="mystery-box-spark one" />
+                <span className="mystery-box-spark two" />
+              </div>
             )}
           </section>
         </aside>
@@ -1350,28 +1409,45 @@ export default function QuestPage() {
       {activeReward ? (
         <div className="reward-backdrop" role="dialog" aria-modal="true" aria-label="闯关奖励已解锁">
           <div className="reward-modal">
-            <span className="reward-badge">CLEAR REWARD</span>
-            <h2>{activeReward.levelId}「{activeReward.levelName}」奖励已解锁</h2>
-            <p>小评已把本关素材提炼成问题清单和指标地图，并固定到右侧「闯关奖励」。</p>
+            <div className="reward-modal-hero" aria-hidden="true">
+              <span className="mystery-box-glow" />
+              <span className="mystery-box-lid" />
+              <span className="mystery-box-body" />
+              <span className="mystery-box-ribbon" />
+              <span className="honor-medal reward-modal-medal">评</span>
+            </div>
+            <span className="reward-badge">HONOR UNLOCKED</span>
+            <h2>{getRewardHonorName(activeReward)}</h2>
+            <p>{activeReward.levelId}「{activeReward.levelName}」已通关。小评已发放虚拟荣誉，并把本关可复用的副产物固定到右侧奖励盒。</p>
             <div className="reward-grid">
               <section>
-                <h3>问题清单</h3>
+                <h3>问题清单预览</h3>
                 <ul>
-                  {activeReward.problems.map((item) => (
+                  {activeReward.problems.slice(0, 3).map((item) => (
                     <li key={item}>{item}</li>
                   ))}
                 </ul>
               </section>
               <section>
-                <h3>指标地图</h3>
+                <h3>指标地图预览</h3>
                 <ul>
-                  {activeReward.metrics.map((item) => (
+                  {activeReward.metrics.slice(0, 3).map((item) => (
                     <li key={item}>{item}</li>
                   ))}
                 </ul>
               </section>
             </div>
             <div className="reward-actions">
+              {canExportProblemList(activeReward) ? (
+                <button className="ghost-button" type="button" onClick={() => void exportRewardArtifact(activeReward, "problems")} disabled={exportDocState.status === "creating"}>
+                  输出问题清单
+                </button>
+              ) : null}
+              {canExportMetricMap(activeReward) ? (
+                <button className="secondary-button" type="button" onClick={() => void exportRewardArtifact(activeReward, "metrics")} disabled={exportDocState.status === "creating"}>
+                  输出指标地图
+                </button>
+              ) : null}
               <button className="secondary-button" type="button" onClick={() => setActiveReward(null)}>
                 已固定，继续闯关
               </button>
