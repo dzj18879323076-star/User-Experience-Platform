@@ -15,15 +15,6 @@ import {
   storageKey
 } from "../lib/quest";
 
-type CityBuilding = {
-  levelId: string;
-  name: string;
-  district: string;
-  className: string;
-  x: number;
-  y: number;
-};
-
 type SaveQuestResponse = {
   sessionId: string;
   submissionId: string;
@@ -62,8 +53,6 @@ type CoachState = CoachResponse & {
   mode: CoachMode;
 };
 
-const backendSessionStorageKey = "life_service_onboarding_quest_session_id_v1";
-
 type CoachMessage = {
   id: string;
   sender: "user" | "guide";
@@ -72,14 +61,15 @@ type CoachMessage = {
   fallbackReason?: string;
 };
 
-const cityBuildings: CityBuilding[] = [
-  { levelId: "L1", name: "城门街区", district: "找店迷宫", className: "gate", x: 13, y: 63 },
-  { levelId: "L2", name: "评审殿", district: "看评裁判所", className: "court", x: 32, y: 36 },
-  { levelId: "L3", name: "交易工坊", district: "团购商品实验室", className: "workshop", x: 53, y: 61 },
-  { levelId: "L4", name: "影像塔", district: "创作者通道", className: "tower", x: 70, y: 30 },
-  { levelId: "L5", name: "商会", district: "商家镜像", className: "guild", x: 78, y: 67 },
-  { levelId: "L6", name: "分发灯塔", district: "平台分发台", className: "lighthouse", x: 47, y: 18 }
-];
+type FieldEntry = {
+  levelId: string;
+  levelName: string;
+  perspective: string;
+  field: string;
+  value: string;
+};
+
+const backendSessionStorageKey = "life_service_onboarding_quest_session_id_v1";
 
 function loadStoredState(): AppState {
   try {
@@ -106,19 +96,19 @@ function getSubmission(state: AppState, levelId: string): Submission {
 function getScoreLabel(score: number) {
   if (score >= 80) {
     return {
-      label: "可进入下一关",
-      hint: "观察完整度较好，建议补充页面样本或截图证据。"
+      label: "报告素材较成熟",
+      hint: "可以进入下一关，但仍建议补充样本对比、路径截图或数据口径。"
     };
   }
   if (score >= 55) {
     return {
-      label: "需要补证据",
-      hint: "已有基本观察，继续补用户目标、路径和产品归因。"
+      label: "已有基础素材",
+      hint: "继续补用户目标、真实路径、证据和产品归因。"
     };
   }
   return {
-    label: "等待提交",
-    hint: "先填写关键字段，再生成阶段汇报卡。"
+    label: "等待体验证据",
+    hint: "先把真实看到的页面、动作和判断写给 Agnes。"
   };
 }
 
@@ -138,31 +128,55 @@ function getProviderLabel(provider: CoachResponse["provider"]) {
 function getCoachActivityLabel(coachState: CoachState) {
   if (coachState.fallbackReason) return "规则兜底中";
   if (coachState.status === "loading") {
-    if (coachState.mode === "final_report") return "整理报告中";
-    if (coachState.mode === "post_submit_review") return "复盘提交中";
-    if (coachState.mode === "guide_chat") return "回答问题中";
-    return "阅读记录中";
+    if (coachState.mode === "final_report") return "生成体验报告";
+    if (coachState.mode === "post_submit_review") return "沉淀阶段小结";
+    if (coachState.mode === "guide_chat") return "追问体验证据";
+    return "阅读关卡素材";
   }
   if (coachState.status === "error") return "需要人工检查";
   if (coachState.provider === "rules") return "本地向导";
   return "模型向导";
 }
 
-function getBuilding(levelId: string) {
-  return cityBuildings.find((building) => building.levelId === levelId) || cityBuildings[0];
-}
-
 function getNextAction(score: number, hasReportCard: boolean, hasNextLevel: boolean) {
   if (score < 55) {
-    return "继续填写体验记录，先补齐关键观察。";
+    return "继续用对话补齐真实体验证据。";
   }
   if (score < 80) {
-    return "补充路径、证据和产品归因，再生成汇报卡。";
+    return "让 Agnes 追问缺失信息，再沉淀阶段小结。";
   }
   if (!hasReportCard) {
-    return "生成阶段汇报卡，沉淀本关结论。";
+    return "生成阶段点评，把本关素材纳入报告骨架。";
   }
-  return hasNextLevel ? "进入下一关，继续完成训练链路。" : "生成完整报告草稿，准备复盘输出。";
+  return hasNextLevel ? "进入下一关，继续完成训练链路。" : "生成完整体验报告草稿。";
+}
+
+function getCurrentEntries(level: Level, submission: Submission): FieldEntry[] {
+  return getLevelFields(level)
+    .map((field) => ({
+      levelId: level.id,
+      levelName: level.name,
+      perspective: level.perspective,
+      field,
+      value: (submission.values[field] || "").trim()
+    }))
+    .filter((entry) => entry.value);
+}
+
+function getAllFilledEntries(state: AppState): FieldEntry[] {
+  return levels.flatMap((level) => getCurrentEntries(level, getSubmission(state, level.id)));
+}
+
+function getCaptureTargetField(level: Level, submission: Submission) {
+  const fields = getLevelFields(level);
+  const firstMissing = fields.find((field) => !(submission.values[field] || "").trim());
+  if (firstMissing) return firstMissing;
+
+  return (
+    fields.find((field) => /产品机会|评价缺口|问题|卡点|断点|决策/.test(field)) ||
+    fields[fields.length - 1] ||
+    "补充观察"
+  );
 }
 
 function buildReportCard(level: Level, submission: Submission) {
@@ -171,35 +185,29 @@ function buildReportCard(level: Level, submission: Submission) {
   const missing = fields.filter((field) => !(submission.values[field] || "").trim());
   const evidence = fields
     .filter((field) => (submission.values[field] || "").trim())
-    .slice(0, 4)
+    .slice(0, 5)
     .map((field) => `- ${field}：${submission.values[field]}`)
     .join("\n");
 
-  return `关卡：${level.name}
-完成状态：${score >= 80 ? "已完成初轮体验，可以进入下一关。" : "已提交部分观察，建议补充后再进入下一关。"}
+  return `## ${level.id} ${level.name} 阶段小结
 
-核心观察：
-围绕「${level.goal}」已经形成初步体验记录。当前材料最适合继续提炼用户路径、决策信息和产品机会。
+### 本关定位
+以「${level.perspective}」视角完成「${level.goal}」。
 
-证据材料：
+### 当前证据
 ${evidence || "- 暂无有效证据。"}
 
-产品问题：
-请继续把体感问题归因到路径、信息、动机、内容质量、交易承接或分发机制中的一种。
+### 初步产品判断
+当前素材需要被继续归因到路径、信息、信任、内容质量、交易承接或分发机制中的一种，避免只停留在个人体感。
 
-机会点：
-${submission.values["产品机会"] || submission.values["评价缺口"] || submission.values["经营诊断机会"] || "待补充一个可验证的产品机会点。"}
+### 过程副产物
+- 问题清单：从本关卡点、缺口、断点中继续提炼。
+- 指标地图：从影响决策、转化、评价质量和分发价值的信号中继续补齐。
 
-待验证问题：
-- 这个观察是否只来自个体体验，还是可能存在规模问题？
-- 最大流失点发生在哪个页面或动作？
-- 哪些数据可以验证这个问题的影响规模？
+### 待补信息
+${missing.length ? missing.slice(0, 8).map((field) => `- ${field}`).join("\n") : "- 暂无明显缺失字段。"}
 
-规则草稿评分：${score}/100
-缺失字段：${missing.length ? missing.join("、") : "无"}
-
-下一关建议：
-${level.passCriteria.map((item) => `- ${item}`).join("\n")}`;
+规则草稿评分：${score}/100`;
 }
 
 function buildFullReport(state: AppState) {
@@ -208,28 +216,51 @@ function buildFullReport(state: AppState) {
     const lines = getLevelFields(level)
       .map((field) => `- ${field}：${values[field] || "待补充"}`)
       .join("\n");
-    return `## ${level.name}\n\n训练视角：${level.perspective}\n\n${lines}\n`;
+    return `## ${level.id} ${level.name}\n\n训练视角：${level.perspective}\n\n${lines}\n`;
   });
 
-  return `# 抖音生活服务评价体验报告：从看评消费到评价生产
+  return `# 抖音生活服务评价体验报告草稿
 
-## 背景与体验范围
+## 1. 背景与体验范围
 
-本报告来自「生活服务新人闯关训练」MVP，围绕消费者看评、评价生产、创作者路径、商家价值和平台分发进行结构化体验。
+本报告来自「生活服务新人闯关训练」MVP，围绕消费者看评、评价生产、团购商品、创作者内容、商家经营和平台分发进行结构化体验。报告结论只基于当前已记录的真实体验材料，未记录的事实不做推断。
+
+## 2. 核心体验材料
 
 ${sections.join("\n")}
-## 产品机会点汇总
+## 3. 初步产品机会
 
-- 提升内容到 POI、评价、团购和收藏/规划的转化效率。
-- 补充活动型 POI 和周末目的地供给。
-- 建立评价质量 rubric，区分决策有用和内容丰富。
+- 将用户路径中的评价入口、评价缺口和交易转化节点串起来。
+- 建立评价质量 rubric，区分决策有用、内容丰富、可信和适合分发。
+- 为商家侧补充可行动的评价诊断信息。
 
-## 后续待验证问题
+## 4. 待验证问题
 
-- 用户从内容页进入 POI/团购/评价的最大流失点在哪里？
+- 哪些评价信息最影响用户从 POI 到团购或到店的决策？
 - 商品评价和地点评价分别承担什么决策角色？
-- 哪些评价适合被高权重分发？
-`;
+- 哪些评价信号适合被更高权重分发？`;
+}
+
+function buildProblemArtifacts(entries: FieldEntry[]) {
+  const problemEntries = entries.filter((entry) => /问题|缺口|卡点|机会|断点|无法|不足|影响|犹豫/.test(`${entry.field}${entry.value}`));
+
+  if (!problemEntries.length) {
+    return ["待沉淀：先通过对话补充真实路径、评价出现位置、决策卡点和机会点。"];
+  }
+
+  return problemEntries.slice(-6).map((entry) => `${entry.levelId} ${entry.levelName}｜${entry.field}：${entry.value}`);
+}
+
+function buildMetricArtifacts(entries: FieldEntry[]) {
+  const text = entries.map((entry) => `${entry.field} ${entry.value}`).join("\n");
+  const metrics = [
+    /入口|路径|流失|转化|交易/.test(text) ? "路径转化：内容/搜索/POI/团购/评价入口点击与跳出" : "路径转化：待补入口与关键动作",
+    /有用|无用|质量|可信|图文|样本|评价/.test(text) ? "评价质量：有用率、信息完整度、可信信号、图文覆盖" : "评价质量：待补有用/无用评价样本",
+    /商家|经营|回复|诊断/.test(text) ? "商家经营：可行动反馈、回复效率、负向问题聚类" : "商家经营：待补商家可行动信息",
+    /分发|推荐|高权重|低分|激励/.test(text) ? "平台分发：高价值评价识别、激励污染、分发权重" : "平台分发：待补可分发评价规则"
+  ];
+
+  return metrics;
 }
 
 export default function QuestPage() {
@@ -244,7 +275,7 @@ export default function QuestPage() {
     {
       id: "guide-welcome",
       sender: "guide",
-      text: "我是阿引。你可以直接问我这一关怎么做、现在缺什么，或者让帮你把观察整理成产品机会。",
+      text: "我是 Agnes/阿引。你不用先填复杂表单，直接把真实体验过程写给我：你想完成什么、从哪里进入、看到了哪些评价、哪里影响了决策。我会按关卡帮你追问，并把素材沉淀成最终体验报告。",
       provider: "rules"
     }
   ]);
@@ -259,9 +290,9 @@ export default function QuestPage() {
     status: "idle",
     mode: "pre_submit_hint",
     roleName: "阿引",
-    messageMarkdown: "正在读取本关任务。先查看任务目标，再填写真实体验记录。",
+    messageMarkdown: "正在读取本关任务。先把真实体验过程写进对话框。",
     followUpQuestions: [],
-    nextAction: "先完成 2-3 个关键字段。",
+    nextAction: "先写下 1 条真实体验路径。",
     provider: "rules"
   });
 
@@ -334,13 +365,16 @@ export default function QuestPage() {
   const activeRank = getRankLabel(activeScore);
   const activeLevelIndex = levels.findIndex((level) => level.id === activeLevel.id);
   const nextLevel = levels[activeLevelIndex + 1];
-  const activeBuilding = getBuilding(activeLevel.id);
   const canAdvance = activeScore >= 80;
   const completedCount = levels.filter((level) => isComplete(level, state.submissions[level.id])).length;
   const percent = Math.round((completedCount / levels.length) * 100);
   const nextAction = getNextAction(activeScore, Boolean(reportCard), Boolean(nextLevel));
   const coachProviderLabel = getProviderLabel(coachState.provider);
   const coachActivityLabel = getCoachActivityLabel(coachState);
+  const currentEntries = useMemo(() => getCurrentEntries(activeLevel, activeSubmission), [activeLevel, activeSubmission]);
+  const allEntries = useMemo(() => getAllFilledEntries(state), [state]);
+  const problemArtifacts = useMemo(() => buildProblemArtifacts(allEntries), [allEntries]);
+  const metricArtifacts = useMemo(() => buildMetricArtifacts(allEntries), [allEntries]);
 
   useEffect(() => {
     setAutosaveText(activeSubmission.updatedAt ? `已保存 ${formatTime(activeSubmission.updatedAt)}` : "未保存");
@@ -379,6 +413,40 @@ export default function QuestPage() {
     setAutosaveText("已自动保存");
   }
 
+  function persistConversationObservation(text: string) {
+    const field = getCaptureTargetField(activeLevel, activeSubmission);
+    const existingValue = (activeSubmission.values[field] || "").trim();
+    const nextValue = existingValue ? `${existingValue}\n\n${text}` : text;
+    const nextSubmission: Submission = {
+      ...activeSubmission,
+      values: {
+        ...activeSubmission.values,
+        [field]: nextValue
+      },
+      updatedAt: new Date().toISOString()
+    };
+    nextSubmission.score = scoreSubmission(activeLevel, nextSubmission);
+    const nextSubmissions = {
+      ...state.submissions,
+      [activeLevel.id]: nextSubmission
+    };
+
+    setState((current) => ({
+      ...current,
+      submissions: {
+        ...current.submissions,
+        [activeLevel.id]: nextSubmission
+      }
+    }));
+    setAutosaveText(`已沉淀到「${field}」`);
+
+    return {
+      values: nextSubmission.values,
+      score: nextSubmission.score || 0,
+      submissions: nextSubmissions
+    };
+  }
+
   function switchLevel(levelId: string) {
     updateState((current) => ({
       ...current,
@@ -407,7 +475,17 @@ export default function QuestPage() {
     setAutosaveText("已保存");
   }
 
-  async function requestCoach(mode: CoachMode, options?: { sessionId?: string; userQuestion?: string }) {
+  async function requestCoach(
+    mode: CoachMode,
+    options?: {
+      sessionId?: string;
+      userQuestion?: string;
+      activeLevelId?: string;
+      values?: Record<string, string>;
+      score?: number;
+      submissions?: AppState["submissions"];
+    }
+  ) {
     setCoachState((current) => ({
       ...current,
       status: "loading",
@@ -416,12 +494,12 @@ export default function QuestPage() {
       fallbackReason: undefined,
       messageMarkdown:
         mode === "final_report"
-          ? "阿引正在整理完整体验报告..."
+          ? "Agnes 正在整理完整体验报告..."
           : mode === "post_submit_review"
-            ? "阿引正在复盘本关提交..."
+            ? "Agnes 正在沉淀本关阶段小结..."
             : mode === "guide_chat"
-              ? "阿引正在回答你的问题..."
-            : "阿引正在阅读你的体验记录..."
+              ? "Agnes 正在追问和归档你的体验素材..."
+              : "Agnes 正在阅读当前关卡..."
     }));
 
     try {
@@ -432,13 +510,13 @@ export default function QuestPage() {
         },
         body: JSON.stringify({
           sessionId: options?.sessionId || backendSessionId || undefined,
-          activeLevelId: state.activeLevelId,
+          activeLevelId: options?.activeLevelId || state.activeLevelId,
           levelId: activeLevel.id,
-          values: activeSubmission.values,
-          score: activeScore,
+          values: options?.values || activeSubmission.values,
+          score: options?.score ?? activeScore,
           mode,
           userQuestion: options?.userQuestion,
-          submissions: state.submissions
+          submissions: options?.submissions || state.submissions
         })
       });
       const payload = (await response.json()) as Partial<CoachResponse> & { error?: string };
@@ -482,8 +560,8 @@ export default function QuestPage() {
         setReportCard(nextCoachState.reportMarkdown);
         setReportCardStatus(
           nextCoachState.fallbackReason
-            ? "导师点评已生成并入库（规则兜底）"
-            : `导师点评已生成并入库（${getProviderLabel(nextCoachState.provider)}）`
+            ? "阶段小结已生成（规则兜底）"
+            : `阶段小结已生成（${getProviderLabel(nextCoachState.provider)}）`
         );
       }
 
@@ -501,7 +579,7 @@ export default function QuestPage() {
         status: "error",
         messageMarkdown: message,
         followUpQuestions: ["先确认本地 dev server 正在运行。", "如果启用了模型 provider，请检查后端环境变量。"],
-        nextAction: "可以继续填写体验记录；本地保存不会受影响。"
+        nextAction: "可以继续记录体验素材；本地保存不会受影响。"
       }));
       setCoachMessages((current) => [
         ...current,
@@ -517,36 +595,70 @@ export default function QuestPage() {
     }
   }
 
+  async function submitGuideQuestion(question: string, shouldCapture = true) {
+    const normalizedQuestion = question.trim();
+    if (!normalizedQuestion || coachState.status === "loading") return;
+
+    const captured = shouldCapture ? persistConversationObservation(normalizedQuestion) : undefined;
+
+    setCoachMessages((current) => [
+      ...current,
+      {
+        id: `user-${Date.now()}`,
+        sender: "user",
+        text: normalizedQuestion
+      }
+    ]);
+
+    try {
+      await requestCoach("guide_chat", {
+        userQuestion: normalizedQuestion,
+        values: captured?.values,
+        score: captured?.score,
+        submissions: captured?.submissions
+      });
+    } catch {
+      // requestCoach 已经把错误写入对话，不再重复打断用户。
+    }
+  }
+
   async function askGuide(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const question = coachInput.trim();
     if (!question || coachState.status === "loading") return;
 
     setCoachInput("");
-    setCoachMessages((current) => [
-      ...current,
-      {
-        id: `user-${Date.now()}`,
-        sender: "user",
-        text: question
-      }
-    ]);
-    await requestCoach("guide_chat", { userQuestion: question });
+    await submitGuideQuestion(question, true);
   }
 
   async function generateFullReport() {
-    const result = await requestCoach("final_report");
-    const report = result.reportMarkdown || buildFullReport(state);
-    setReportOutput(report);
-    return report;
+    try {
+      const result = await requestCoach("final_report");
+      const report = result.reportMarkdown || buildFullReport(state);
+      setReportOutput(report);
+      return report;
+    } catch {
+      const report = buildFullReport(state);
+      setReportOutput(report);
+      return report;
+    }
   }
 
   async function copyReportCard() {
-    const nextReportCard = reportCard.trim() ? reportCard : (await requestCoach("post_submit_review")).reportMarkdown || "";
+    let nextReportCard = reportCard.trim();
+
+    if (!nextReportCard) {
+      try {
+        nextReportCard = (await requestCoach("post_submit_review")).reportMarkdown || "";
+      } catch {
+        nextReportCard = "";
+      }
+    }
+
     const text = nextReportCard.trim() ? nextReportCard : buildReportCard(activeLevel, activeSubmission);
     await navigator.clipboard.writeText(text.trim());
     setReportCardStatus("已复制到剪贴板");
-    setAutosaveText("汇报卡已复制");
+    setAutosaveText("阶段小结已复制");
   }
 
   async function copyReport() {
@@ -621,70 +733,61 @@ export default function QuestPage() {
   }
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
+    <div className="app-shell conversation-shell">
+      <header className="topbar conversation-topbar">
         <div>
-          <div className="eyebrow">Quest Board / 新人训练副本</div>
-          <h1>生活服务新人闯关训练</h1>
+          <div className="eyebrow">Agnes Guided Quest / 体验报告工坊</div>
+          <h1>用对话完成闯关，用证据生成体验报告</h1>
+          <p>保留 6 关循序渐进的训练逻辑，主交互收敛为 Agnes 对话；问题清单和指标地图作为过程副产物沉淀。</p>
         </div>
         <div className="hero-stats" aria-label="当前闯关状态">
           <div>
-            <span>当前等级</span>
+            <span>当前关卡</span>
             <strong>{activeLevel.id}</strong>
           </div>
           <div>
-            <span>训练 XP</span>
+            <span>报告成熟度</span>
             <strong>{activeScore}/100</strong>
           </div>
           <div>
-            <span>完成进度</span>
+            <span>闯关进度</span>
             <strong>{percent}%</strong>
           </div>
         </div>
       </header>
 
-      <section className="status-band">
+      <section className="status-band conversation-status-band">
         <div>
           <span className="status-label">主线任务</span>
           <strong>抖音生活服务评价生产与看评消费体验</strong>
         </div>
         <div>
-          <span className="status-label">通关</span>
-          <strong>{completedCount}/{levels.length}</strong>
+          <span className="status-label">当前阶段</span>
+          <strong>{activeLevel.name}</strong>
         </div>
         <div>
-          <span className="status-label">徽章</span>
-          <strong>{activeLevel.badge}</strong>
+          <span className="status-label">报告状态</span>
+          <strong>{scoreCopy.label}</strong>
         </div>
         <div>
-          <span className="status-label">下一步指令</span>
+          <span className="status-label">下一步</span>
           <strong>{nextAction}</strong>
         </div>
-        <div>
-          <span className="status-label">后端数据库</span>
-          <strong>
-            {databaseConfigured === null || databaseUrlValid === null
-              ? "检查中"
-              : databaseConfigured && databaseUrlValid
-                ? "已配置"
-                : "需修正"}
-          </strong>
-        </div>
         <div className="progress-cell">
-          <span className="status-label">副本进度</span>
+          <span className="status-label">完成 {completedCount}/{levels.length}</span>
           <div className="progress-track" aria-label="完成进度">
             <div style={{ width: `${percent}%` }} />
           </div>
         </div>
       </section>
 
-      <main className="workspace">
-        <nav className="level-map" aria-label="关卡地图">
+      <main className="conversation-workspace">
+        <nav className="level-map compact-level-map" aria-label="闯关步骤">
           <div className="panel-heading">
-            <h2>闯关地图</h2>
-            <span>6 个任务点</span>
+            <h2>闯关步骤</h2>
+            <span>后台状态机</span>
           </div>
-          <div className="level-list">
+          <div className="level-list compact-level-list">
             {levels.map((level, index) => {
               const completed = isComplete(level, state.submissions[level.id]);
               const active = level.id === state.activeLevelId;
@@ -696,120 +799,99 @@ export default function QuestPage() {
                   onClick={() => switchLevel(level.id)}
                   aria-current={active ? "step" : undefined}
                 >
-                  <span className="level-index">LV{index + 1}</span>
+                  <span className="level-index">{index + 1}</span>
                   <span>
                     <strong>{level.name}</strong>
-                    <small>{level.perspective} · {level.estimatedMinutes} 分钟</small>
+                    <small>{level.perspective} · {level.badge}</small>
                   </span>
-                  <span className="level-state">{completed ? "CLEAR" : active ? "ACTIVE" : "OPEN"}</span>
+                  <span className="level-state">{completed ? "CLEAR" : active ? "NOW" : "OPEN"}</span>
                 </button>
               );
             })}
           </div>
         </nav>
 
-        <section className="task-panel">
-          <section className="city-stage" aria-label="生活服务城场景地图">
-            <div className="city-header">
+        <section className="conversation-panel" aria-label="Agnes 对话式闯关区">
+          <div className="mission-brief-card">
+            <span className="pill">MISSION {activeLevel.id} · {activeLevel.perspective} · {activeLevel.estimatedMinutes} 分钟</span>
+            <div className="mission-brief-grid">
               <div>
-                <span className="scene-kicker">Life Service City</span>
-                <h2>生活服务城</h2>
+                <h2>{activeLevel.name}</h2>
+                <p>{activeLevel.goal}</p>
               </div>
-              <div className="scene-status">
-                <span>{activeBuilding.name}</span>
-                <strong>{activeLevel.name}</strong>
+              <div>
+                <span className="status-label">本关主线</span>
+                <strong>{activeLevel.mainTask}</strong>
               </div>
             </div>
-            <div className="city-map">
-              <div className="city-ground" />
-              <div className="city-road road-main" />
-              <div className="city-road road-cross" />
-              <div className="city-road road-diagonal-one" />
-              <div className="city-road road-diagonal-two" />
-              <div className="city-plaza" />
-              {cityBuildings.map((building) => {
-                const level = levels.find((item) => item.id === building.levelId) || levels[0];
-                const completed = isComplete(level, state.submissions[level.id]);
-                const active = building.levelId === activeLevel.id;
-                return (
-                  <button
-                    className={`city-building ${building.className} ${active ? "active" : ""} ${completed ? "completed" : ""}`}
-                    key={building.levelId}
-                    style={{ left: `${building.x}%`, top: `${building.y}%` }}
-                    type="button"
-                    onClick={() => switchLevel(building.levelId)}
-                    aria-label={`${building.name}：${level.name}`}
-                  >
-                    <span className="building-level">{building.levelId}</span>
-                    <span className="building-art" aria-hidden="true">
-                      <span className="building-roof" />
-                      <span className="building-body">
-                        <span className="building-door" />
-                      </span>
-                    </span>
-                    <span className="building-label">
-                      <strong>{building.name}</strong>
-                      <small>{completed ? "CLEAR" : active ? "ACTIVE" : "OPEN"}</small>
-                    </span>
-                  </button>
-                );
-              })}
+          </div>
+
+          <section className="agnes-console">
+            <div className="agnes-console-header">
+              <div>
+                <span className="guide-kicker">Agnes 业务教练</span>
+                <h2>{coachState.roleName}</h2>
+                <p>{scoreCopy.hint}</p>
+              </div>
+              <div className="guide-meta">
+                <span className={`provider-badge ${coachState.provider}`}>{coachProviderLabel}</span>
+                <span>RANK {activeRank}</span>
+                <span>{coachActivityLabel}</span>
+              </div>
+            </div>
+
+            <div className={`guide-chat main-guide-chat ${coachState.status}`}>
+              <div className="guide-messages" aria-live="polite">
+                {coachMessages.slice(-8).map((message) => (
+                  <div className={`guide-message ${message.sender}`} key={message.id}>
+                    <span>{message.sender === "user" ? "你" : coachState.roleName}</span>
+                    <p>{message.text}</p>
+                    {message.fallbackReason ? <small>{message.fallbackReason}</small> : null}
+                  </div>
+                ))}
+              </div>
+
+              <form className="conversation-input-row" onSubmit={askGuide}>
+                <textarea
+                  value={coachInput}
+                  onChange={(event) => setCoachInput(event.target.value)}
+                  placeholder="把体验过程直接写给 Agnes：我从哪里进入、想完成什么、看到了哪些评价、哪里让我犹豫或决定下单……"
+                  disabled={coachState.status === "loading"}
+                />
+                <button className="primary-button" type="submit" disabled={!coachInput.trim() || coachState.status === "loading"}>
+                  发送并沉淀
+                </button>
+              </form>
+            </div>
+
+            <div className="conversation-actions">
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={() => void submitGuideQuestion("请告诉我当前关卡应该怎么体验，先问我一个最关键的问题。", false)}
+                disabled={coachState.status === "loading"}
+              >
+                让 Agnes 开始引导
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void submitGuideQuestion("请基于当前素材指出缺失证据，并把下一步体验动作说清楚。", false)}
+                disabled={coachState.status === "loading"}
+              >
+                追问缺失证据
+              </button>
+              <button className="ghost-button" type="button" onClick={() => void requestCoach("post_submit_review")} disabled={coachState.status === "loading"}>
+                生成阶段小结
+              </button>
+              <button className="primary-button" type="button" onClick={() => void generateFullReport()} disabled={coachState.status === "loading"}>
+                生成体验报告
+              </button>
             </div>
           </section>
 
-          <div className="task-header">
-            <div>
-              <span className="pill">MISSION {activeLevel.id} · {activeLevel.perspective} · {activeLevel.estimatedMinutes} 分钟</span>
-              <h2>{activeLevel.name}</h2>
-            </div>
-            <div className="task-actions">
-              <button className="ghost-button" type="button" onClick={saveProgress}>
-                保存本地
-              </button>
-              <button
-                className="primary-button"
-                type="button"
-                onClick={saveToBackend}
-                disabled={backendSaveState.status === "saving" || backendSaveState.status === "checking"}
-              >
-                {backendSaveState.status === "saving" ? "写入中..." : "保存并验证入库"}
-              </button>
-            </div>
-          </div>
-
-          <div className={`backend-status ${backendSaveState.status}`}>
-            <div>
-              <strong>{backendSaveState.message}</strong>
-              <span>当前关卡：{activeLevel.id}</span>
-            </div>
-            <dl>
-              <div>
-                <dt>Session</dt>
-                <dd>{backendSessionId || "尚未创建"}</dd>
-              </div>
-              <div>
-                <dt>字段数</dt>
-                <dd>{backendSaveState.savedFieldCount ?? Object.keys(activeSubmission.values).length}</dd>
-              </div>
-              <div>
-                <dt>保存时间</dt>
-                <dd>{backendSaveState.savedAt ? new Date(backendSaveState.savedAt).toLocaleString() : "尚未保存"}</dd>
-              </div>
-            </dl>
-          </div>
-
-          <div className="task-card">
-            <h3>任务目标</h3>
-            <p>{activeLevel.goal}</p>
-            <h3>主线任务</h3>
-            <p>{activeLevel.mainTask}</p>
-          </div>
-
-          <div className="task-card">
-            <div className="section-title">
-              <h3>体验记录</h3>
-              <span>{autosaveText}</span>
-            </div>
+          <details className="structured-fields">
+            <summary>查看/修正结构化素材字段</summary>
             <form className="submission-form">
               {activeLevel.sections
                 ? activeLevel.sections.map((section) => (
@@ -834,110 +916,113 @@ export default function QuestPage() {
                     />
                   ))}
             </form>
-          </div>
-
-          <div className="task-card">
-            <h3>通过标准</h3>
-            <ul className="criteria-list">
-              {activeLevel.passCriteria.map((criterion) => (
-                <li key={criterion}>{criterion}</li>
-              ))}
-            </ul>
-          </div>
+          </details>
         </section>
 
-        <aside className="coach-panel">
-          <div className="panel-heading">
-            <h2>Game Master / NPC 教练</h2>
-            <span>RANK {activeRank}</span>
-          </div>
-          <div className={`guide-card ${coachState.status}`}>
-            <div className="guide-avatar-frame">
-              <img src="/characters/ayin-guide.webp" alt="阿引，生活服务新人闯关训练的 Game Master 向导" />
+        <aside className="side-artifacts" aria-label="报告过程副产物">
+          <section className="artifact-card command-card">
+            <div className="panel-heading">
+              <h2>交付控制台</h2>
+              <span>{autosaveText}</span>
             </div>
-            <div className="guide-profile">
-              <span className="guide-kicker">虚拟向导</span>
-              <strong>{coachState.roleName}</strong>
-              <p>陪你把真实体验记录沉淀成产品判断。</p>
-              <div className="guide-meta">
-                <span className={`provider-badge ${coachState.provider}`}>{coachProviderLabel}</span>
-                <span>{coachActivityLabel}</span>
+            <p>最终主交付是体验报告；问题清单、指标地图和阶段小结只作为生成报告的过程素材。</p>
+            <div className="artifact-actions">
+              <button className="ghost-button" type="button" onClick={saveProgress}>
+                保存本地
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={saveToBackend}
+                disabled={backendSaveState.status === "saving" || backendSaveState.status === "checking"}
+              >
+                {backendSaveState.status === "saving" ? "写入中..." : "保存入库"}
+              </button>
+              <button className="primary-button" type="button" onClick={goToNextLevel} disabled={!nextLevel || !canAdvance}>
+                {nextLevel ? `进入 ${nextLevel.id}` : "已完成"}
+              </button>
+            </div>
+            <small>{backendSaveState.message}</small>
+          </section>
+
+          <section className="artifact-card">
+            <div className="panel-heading compact">
+              <h2>已沉淀观察</h2>
+              <span>{currentEntries.length}/{getLevelFields(activeLevel).length}</span>
+            </div>
+            <div className="artifact-list">
+              {currentEntries.length ? (
+                currentEntries.slice(-6).map((entry) => (
+                  <article key={`${entry.field}-${entry.value.slice(0, 12)}`}>
+                    <strong>{entry.field}</strong>
+                    <p>{entry.value}</p>
+                  </article>
+                ))
+              ) : (
+                <p className="empty-copy">还没有本关素材。先在对话框写一条真实体验。</p>
+              )}
+            </div>
+          </section>
+
+          <section className="artifact-card">
+            <div className="panel-heading compact">
+              <h2>问题清单</h2>
+              <span>过程副产物</span>
+            </div>
+            <ul className="artifact-bullets">
+              {problemArtifacts.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </section>
+
+          <section className="artifact-card">
+            <div className="panel-heading compact">
+              <h2>指标地图</h2>
+              <span>过程副产物</span>
+            </div>
+            <ul className="artifact-bullets">
+              {metricArtifacts.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </section>
+
+          <section className="artifact-card report-artifact-card">
+            <div className="panel-heading compact">
+              <h2>报告产物</h2>
+              <div className="inline-actions">
+                <button className="text-button" type="button" onClick={copyReportCard}>
+                  复制小结
+                </button>
+                <button className="text-button" type="button" onClick={copyReport}>
+                  复制报告
+                </button>
               </div>
             </div>
-          </div>
-          <div className="guide-context">
-            <span>{activeBuilding.name} · {activeBuilding.district}</span>
-            <strong>{scoreCopy.label}</strong>
-            <p>{scoreCopy.hint}</p>
-          </div>
-
-          <div className={`guide-chat ${coachState.status}`}>
-            <div className="guide-messages" aria-live="polite">
-              {coachMessages.slice(-6).map((message) => (
-                <div className={`guide-message ${message.sender}`} key={message.id}>
-                  <span>{message.sender === "user" ? "你" : coachState.roleName}</span>
-                  <p>{message.text}</p>
-                  {message.fallbackReason ? <small>{message.fallbackReason}</small> : null}
-                </div>
-              ))}
+            <div className={`report-status ${coachState.status === "ready" || reportCard || reportOutput ? "ready" : ""}`}>
+              {coachState.status === "loading" ? "Agnes 正在处理" : reportCardStatus}
             </div>
-
-            <form className="guide-input-row" onSubmit={askGuide}>
-              <input
-                value={coachInput}
-                onChange={(event) => setCoachInput(event.target.value)}
-                placeholder="直接问阿引：这一关怎么做？现在缺什么？"
-                disabled={coachState.status === "loading"}
-              />
-              <button className="primary-button" type="submit" disabled={!coachInput.trim() || coachState.status === "loading"}>
-                发送
-              </button>
-            </form>
-          </div>
-
-          <div className="guide-quick-actions">
-            <button className="secondary-button" type="button" onClick={() => void requestCoach("post_submit_review")} disabled={coachState.status === "loading"}>
-              点评本关
-            </button>
-            <button className="ghost-button" type="button" onClick={() => void generateFullReport()} disabled={coachState.status === "loading"}>
-              生成报告
-            </button>
-            <button className="primary-button" type="button" onClick={goToNextLevel} disabled={!nextLevel || !canAdvance}>
-              {nextLevel ? "下一关" : "已完成"}
-            </button>
-          </div>
-
-          <div className={`report-status ${coachState.status === "ready" || reportCard ? "ready" : ""}`}>
-            {coachState.status === "loading" ? "阿引正在处理" : reportCardStatus}
-          </div>
-
-          {reportCard || reportOutput ? (
-            <details className="guide-artifacts">
-              <summary>查看可复制产物</summary>
-              {reportCard ? (
-                <section>
-                  <div className="artifact-heading">
-                    <strong>阶段点评</strong>
-                    <button className="text-button" type="button" onClick={copyReportCard}>
-                      复制
-                    </button>
-                  </div>
-                  <pre>{reportCard}</pre>
-                </section>
-              ) : null}
-              {reportOutput ? (
-                <section>
-                  <div className="artifact-heading">
-                    <strong>报告草稿</strong>
-                    <button className="text-button" type="button" onClick={copyReport}>
-                      复制
-                    </button>
-                  </div>
-                  <pre>{reportOutput}</pre>
-                </section>
-              ) : null}
-            </details>
-          ) : null}
+            {reportCard || reportOutput ? (
+              <details className="guide-artifacts" open>
+                <summary>查看草稿</summary>
+                {reportCard ? (
+                  <section>
+                    <strong>阶段小结</strong>
+                    <pre>{reportCard}</pre>
+                  </section>
+                ) : null}
+                {reportOutput ? (
+                  <section>
+                    <strong>体验报告</strong>
+                    <pre>{reportOutput}</pre>
+                  </section>
+                ) : null}
+              </details>
+            ) : (
+              <p className="empty-copy">完成几轮对话后，可生成阶段小结或最终体验报告。</p>
+            )}
+          </section>
         </aside>
       </main>
     </div>
