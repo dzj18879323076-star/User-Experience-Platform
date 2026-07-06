@@ -50,10 +50,11 @@ type ModelProviderConfig = {
   baseUrl: string;
   model: string;
   endpoint: "responses" | "chat_completions";
+  timeoutMs: number;
 };
 
 const roleName = "阿引";
-const modelTimeoutMs = 20_000;
+const defaultModelTimeoutMs = 45_000;
 const productOpportunityFields = ["产品机会", "评价缺口", "经营诊断机会", "二者缺口", "信任断点", "最大卡点"];
 
 const evaluationKnowledgeBase = `
@@ -324,6 +325,7 @@ ${stagedGuideRules}
 }
 
 硬性要求：
+- 必须使用上方【评价评分业务知识库】和【对话式闯关规则】进行判断、追问和报告组织。
 - 不编造用户没有提供的事实、竞品表现或数据。
 - 如果用户素材不足，明确指出缺失证据，不要强行生成确定性结论。
 - followUpQuestions 最多 3 条，优先追问真实路径、评价样本、决策影响、业务归因和指标口径。
@@ -332,6 +334,7 @@ ${stagedGuideRules}
 - final_report 的 reportMarkdown 是完整体验报告草稿，问题清单和指标地图只能作为过程副产物/附录，不要喧宾夺主。
 - guide_chat 要像对话教练：先回应用户，再追问一个关键问题，并说明本轮素材会沉淀到哪类报告材料。
 
+当前模型超时：${getModelTimeoutMs()}ms
 当前模式：${request.mode}
 用户问题/本轮素材：${request.userQuestion || "无"}
 当前关卡：${level.id} ${level.name}
@@ -352,16 +355,28 @@ function normalizeBaseUrl(baseUrl: string) {
   return baseUrl.replace(/\/+$/, "");
 }
 
+function getModelTimeoutMs() {
+  const raw = process.env.QUEST_AGENT_TIMEOUT_MS || process.env.AGNES_TIMEOUT_MS || "";
+  const parsed = Number.parseInt(raw, 10);
+
+  if (Number.isFinite(parsed) && parsed >= 10_000 && parsed <= 120_000) {
+    return parsed;
+  }
+
+  return defaultModelTimeoutMs;
+}
+
 function buildProviderConfig(): ModelProviderConfig | undefined {
-  const provider = process.env.QUEST_AGENT_PROVIDER;
+  const provider = process.env.QUEST_AGENT_PROVIDER || (process.env.AGNES_API_KEY ? "agnes" : "");
 
   if (provider === "agnes") {
     return {
       provider,
-      apiKey: process.env.AGNES_API_KEY,
-      baseUrl: process.env.AGNES_BASE_URL || "",
-      model: process.env.AGNES_MODEL || "",
-      endpoint: "chat_completions"
+      apiKey: process.env.AGNES_API_KEY || process.env.QUEST_AGENT_API_KEY,
+      baseUrl: process.env.AGNES_BASE_URL || process.env.QUEST_AGENT_BASE_URL || "",
+      model: process.env.AGNES_MODEL || process.env.QUEST_AGENT_MODEL || "",
+      endpoint: "chat_completions",
+      timeoutMs: getModelTimeoutMs()
     };
   }
 
@@ -371,7 +386,8 @@ function buildProviderConfig(): ModelProviderConfig | undefined {
       apiKey: process.env.OPENAI_API_KEY,
       baseUrl: "https://api.openai.com/v1",
       model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
-      endpoint: "responses"
+      endpoint: "responses",
+      timeoutMs: getModelTimeoutMs()
     };
   }
 
@@ -452,7 +468,7 @@ async function callModelProvider(request: QuestCoachRequest, config: ModelProvid
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), modelTimeoutMs);
+  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
   const prompt = buildModelPrompt(request);
 
   try {

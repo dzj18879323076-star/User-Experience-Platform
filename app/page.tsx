@@ -120,13 +120,12 @@ function getRankLabel(score: number) {
 }
 
 function getProviderLabel(provider: CoachResponse["provider"]) {
-  if (provider === "agnes") return "Agnes";
+  if (provider === "agnes") return "Agnes 知识库";
   if (provider === "openai") return "OpenAI";
-  return "规则引导";
+  return "备用引导";
 }
 
 function getCoachActivityLabel(coachState: CoachState) {
-  if (coachState.fallbackReason) return "规则兜底中";
   if (coachState.status === "loading") {
     if (coachState.mode === "final_report") return "生成体验报告";
     if (coachState.mode === "post_submit_review") return "沉淀阶段小结";
@@ -134,7 +133,7 @@ function getCoachActivityLabel(coachState: CoachState) {
     return "阅读关卡素材";
   }
   if (coachState.status === "error") return "需要人工检查";
-  if (coachState.provider === "rules") return "本地向导";
+  if (coachState.provider === "rules") return "备用模式";
   return "模型向导";
 }
 
@@ -389,30 +388,6 @@ export default function QuestPage() {
     setState((current) => updater(current));
   }
 
-  function persistField(field: string, value: string) {
-    updateState((current) => {
-      const submission = getSubmission(current, activeLevel.id);
-      const nextSubmission: Submission = {
-        ...submission,
-        values: {
-          ...submission.values,
-          [field]: value.trim()
-        },
-        updatedAt: new Date().toISOString()
-      };
-      nextSubmission.score = scoreSubmission(activeLevel, nextSubmission);
-
-      return {
-        ...current,
-        submissions: {
-          ...current.submissions,
-          [activeLevel.id]: nextSubmission
-        }
-      };
-    });
-    setAutosaveText("已自动保存");
-  }
-
   function persistConversationObservation(text: string) {
     const field = getCaptureTargetField(activeLevel, activeSubmission);
     const existingValue = (activeSubmission.values[field] || "").trim();
@@ -545,22 +520,23 @@ export default function QuestPage() {
       };
 
       setCoachState(nextCoachState);
-      setCoachMessages((current) => [
-        ...current,
-        {
-          id: `guide-${Date.now()}`,
-          sender: "guide",
-          text: nextCoachState.messageMarkdown,
-          provider: nextCoachState.provider,
-          fallbackReason: nextCoachState.fallbackReason
-        }
-      ]);
+      if (mode !== "pre_submit_hint") {
+        setCoachMessages((current) => [
+          ...current,
+          {
+            id: `guide-${Date.now()}`,
+            sender: "guide",
+            text: nextCoachState.messageMarkdown,
+            provider: nextCoachState.provider
+          }
+        ]);
+      }
 
       if (mode === "post_submit_review" && nextCoachState.reportMarkdown) {
         setReportCard(nextCoachState.reportMarkdown);
         setReportCardStatus(
           nextCoachState.fallbackReason
-            ? "阶段小结已生成（规则兜底）"
+            ? "阶段小结已生成"
             : `阶段小结已生成（${getProviderLabel(nextCoachState.provider)}）`
         );
       }
@@ -577,19 +553,10 @@ export default function QuestPage() {
       setCoachState((current) => ({
         ...current,
         status: "error",
-        messageMarkdown: message,
-        followUpQuestions: ["先确认本地 dev server 正在运行。", "如果启用了模型 provider，请检查后端环境变量。"],
-        nextAction: "可以继续记录体验素材；本地保存不会受影响。"
+        messageMarkdown: "Agnes 暂时没有返回有效结果，请稍后重试。",
+        followUpQuestions: ["先继续记录真实体验素材。", "稍后再让 Agnes 追问或生成报告。"],
+        nextAction: "素材会先保存在本地，不影响继续闯关。"
       }));
-      setCoachMessages((current) => [
-        ...current,
-        {
-          id: `guide-error-${Date.now()}`,
-          sender: "guide",
-          text: message,
-          provider: "rules"
-        }
-      ]);
 
       throw error;
     }
@@ -809,6 +776,29 @@ export default function QuestPage() {
               );
             })}
           </div>
+
+          <div className="quest-mini-map" aria-label="闯关小地图">
+            <div className="quest-route-line" />
+            {levels.map((level, index) => {
+              const completed = isComplete(level, state.submissions[level.id]);
+              const active = level.id === state.activeLevelId;
+              return (
+                <button
+                  className={`quest-node ${active ? "active" : ""} ${completed ? "completed" : ""}`}
+                  type="button"
+                  key={`map-${level.id}`}
+                  onClick={() => switchLevel(level.id)}
+                  aria-label={`前往 ${level.id} ${level.name}`}
+                >
+                  <span className="quest-node-dot">{index + 1}</span>
+                  <span className="quest-node-copy">
+                    <strong>{level.id}</strong>
+                    <small>{level.name}</small>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </nav>
 
         <section className="conversation-panel" aria-label="Agnes 对话式闯关区">
@@ -846,7 +836,6 @@ export default function QuestPage() {
                   <div className={`guide-message ${message.sender}`} key={message.id}>
                     <span>{message.sender === "user" ? "你" : coachState.roleName}</span>
                     <p>{message.text}</p>
-                    {message.fallbackReason ? <small>{message.fallbackReason}</small> : null}
                   </div>
                 ))}
               </div>
@@ -889,34 +878,6 @@ export default function QuestPage() {
               </button>
             </div>
           </section>
-
-          <details className="structured-fields">
-            <summary>查看/修正结构化素材字段</summary>
-            <form className="submission-form">
-              {activeLevel.sections
-                ? activeLevel.sections.map((section) => (
-                    <fieldset className="field-group" key={section.title}>
-                      <legend>{section.title}</legend>
-                      {section.fields.map((field) => (
-                        <Field
-                          key={field}
-                          field={field}
-                          value={activeSubmission.values[field] || ""}
-                          onChange={(value) => persistField(field, value)}
-                        />
-                      ))}
-                    </fieldset>
-                  ))
-                : getLevelFields(activeLevel).map((field) => (
-                    <Field
-                      key={field}
-                      field={field}
-                      value={activeSubmission.values[field] || ""}
-                      onChange={(value) => persistField(field, value)}
-                    />
-                  ))}
-            </form>
-          </details>
         </section>
 
         <aside className="side-artifacts" aria-label="报告过程副产物">
@@ -1025,30 +986,6 @@ export default function QuestPage() {
           </section>
         </aside>
       </main>
-    </div>
-  );
-}
-
-function Field({
-  field,
-  value,
-  onChange
-}: {
-  field: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const id = `field-${field}`;
-  return (
-    <div className="field">
-      <label htmlFor={id}>{field}</label>
-      <textarea
-        id={id}
-        data-field={field}
-        value={value}
-        placeholder="填写你的真实体验观察"
-        onChange={(event) => onChange(event.target.value)}
-      />
     </div>
   );
 }

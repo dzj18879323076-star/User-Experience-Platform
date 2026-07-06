@@ -250,8 +250,7 @@ h3 {
 .side-artifacts,
 .artifact-card,
 .mission-brief-card,
-.agnes-console,
-.structured-fields {
+.agnes-console {
   min-width: 0;
 }
 
@@ -259,8 +258,7 @@ h3 {
 .conversation-panel,
 .side-artifacts > .artifact-card,
 .mission-brief-card,
-.agnes-console,
-.structured-fields {
+.agnes-console {
   background: rgba(255, 253, 246, .92);
   border: 1px solid rgba(23, 32, 38, .13);
   border-radius: 18px;
@@ -357,6 +355,91 @@ h3 {
   color: var(--accent-strong);
   font-size: 11px;
   font-weight: 900;
+}
+
+.quest-mini-map {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 14px 10px 10px;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 248, 232, .78), rgba(223, 243, 238, .42)),
+    radial-gradient(circle at 20% 0%, rgba(242, 184, 75, .22), transparent 32%);
+  border: 1px dashed rgba(15, 139, 141, .32);
+  overflow: hidden;
+}
+
+.quest-route-line {
+  position: absolute;
+  left: 28px;
+  top: 26px;
+  bottom: 28px;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--accent), var(--gold), var(--coral));
+  opacity: .42;
+}
+
+.quest-node {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 9px;
+  align-items: center;
+  border: 0;
+  padding: 0;
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+}
+
+.quest-node-dot {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fffdf6;
+  background: #8d836f;
+  border: 3px solid #fff8e8;
+  font-size: 12px;
+  font-weight: 900;
+  box-shadow: 0 6px 14px rgba(23, 32, 38, .14);
+}
+
+.quest-node.active .quest-node-dot {
+  background: var(--coral);
+  box-shadow: 0 0 0 5px rgba(228, 87, 46, .16), 0 8px 18px rgba(228, 87, 46, .22);
+}
+
+.quest-node.completed .quest-node-dot {
+  background: var(--ok);
+}
+
+.quest-node-copy {
+  display: grid;
+  gap: 1px;
+  padding: 7px 8px;
+  border-radius: 12px;
+  background: rgba(255, 253, 246, .7);
+}
+
+.quest-node.active .quest-node-copy {
+  background: #fff3c9;
+}
+
+.quest-node-copy strong {
+  color: var(--accent-strong);
+  font-size: 12px;
+}
+
+.quest-node-copy small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .conversation-panel {
@@ -863,7 +946,6 @@ input:focus {
   .level-map,
   .mission-brief-card,
   .agnes-console,
-  .structured-fields,
   .artifact-card {
     border-radius: 14px;
   }
