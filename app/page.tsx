@@ -57,8 +57,29 @@ type CoachMessage = {
   id: string;
   sender: "user" | "guide";
   text: string;
+  levelId?: string;
   provider?: CoachResponse["provider"];
   fallbackReason?: string;
+};
+
+type LevelReward = {
+  levelId: string;
+  levelName: string;
+  unlockedAt: string;
+  problems: string[];
+  metrics: string[];
+};
+
+type ExportDocState = {
+  status: "idle" | "creating" | "ready" | "fallback" | "error";
+  message: string;
+  url?: string;
+};
+
+type ExportDocResponse = {
+  status: "ready" | "fallback";
+  message: string;
+  url?: string;
 };
 
 type FieldEntry = {
@@ -70,6 +91,10 @@ type FieldEntry = {
 };
 
 const backendSessionStorageKey = "life_service_onboarding_quest_session_id_v1";
+const coachMessagesStorageKey = "douyin_rating_ux_platform_coach_messages_v1";
+const rewardStorageKey = "douyin_rating_ux_platform_rewards_v1";
+const pinnedRewardsStorageKey = "douyin_rating_ux_platform_pinned_rewards_v1";
+const levelCompletionStorageKey = "douyin_rating_ux_platform_completed_levels_v1";
 
 function loadStoredState(): AppState {
   try {
@@ -87,6 +112,41 @@ function loadStoredBackendSessionId() {
   } catch {
     return "";
   }
+}
+
+function loadStoredJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveStoredJson<T>(key: string, value: T) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // 本地存储不可用时不阻断主流程。
+  }
+}
+
+function removeStoredKeys(keys: string[]) {
+  try {
+    keys.forEach((key) => window.localStorage.removeItem(key));
+  } catch {
+    // 忽略浏览器隐私模式下的 localStorage 异常。
+  }
+}
+
+function createFallbackWelcomeMessage(level: Level): CoachMessage {
+  return {
+    id: `guide-welcome-${level.id}`,
+    sender: "guide",
+    levelId: level.id,
+    text: `我是用户体验官小评。这一关我们先不写结论，只还原真实路径：你最近一次在抖音生活服务里想完成什么消费任务？从哪个入口开始？`
+  };
 }
 
 function getSubmission(state: AppState, levelId: string): Submission {
@@ -108,7 +168,7 @@ function getScoreLabel(score: number) {
   }
   return {
     label: "等待体验证据",
-    hint: "先把真实看到的页面、动作和判断写给 Agnes。"
+    hint: "先把真实看到的页面、动作和判断写给小评。"
   };
 }
 
@@ -120,8 +180,8 @@ function getRankLabel(score: number) {
 }
 
 function getProviderLabel(provider: CoachResponse["provider"]) {
-  if (provider === "agnes") return "Agnes 知识库";
-  if (provider === "openai") return "OpenAI";
+  if (provider === "agnes") return "知识库增强";
+  if (provider === "openai") return "智能生成";
   return "备用引导";
 }
 
@@ -142,7 +202,7 @@ function getNextAction(score: number, hasReportCard: boolean, hasNextLevel: bool
     return "继续用对话补齐真实体验证据。";
   }
   if (score < 80) {
-    return "让 Agnes 追问缺失信息，再沉淀阶段小结。";
+    return "让小评追问缺失信息，再沉淀阶段小结。";
   }
   if (!hasReportCard) {
     return "生成阶段点评，把本关素材纳入报告骨架。";
@@ -222,7 +282,7 @@ function buildFullReport(state: AppState) {
 
 ## 1. 背景与体验范围
 
-本报告来自「生活服务新人闯关训练」MVP，围绕消费者看评、评价生产、团购商品、创作者内容、商家经营和平台分发进行结构化体验。报告结论只基于当前已记录的真实体验材料，未记录的事实不做推断。
+本报告来自「抖音评价评分-用户体验平台」MVP，围绕消费者看评、评价生产、团购商品、创作者内容、商家经营和平台分发进行结构化体验。报告结论只基于当前已记录的真实体验材料，未记录的事实不做推断。
 
 ## 2. 核心体验材料
 
@@ -262,6 +322,23 @@ function buildMetricArtifacts(entries: FieldEntry[]) {
   return metrics;
 }
 
+function buildLevelReward(level: Level, state: AppState): LevelReward {
+  const entries = getCurrentEntries(level, getSubmission(state, level.id));
+
+  return {
+    levelId: level.id,
+    levelName: level.name,
+    unlockedAt: new Date().toISOString(),
+    problems: buildProblemArtifacts(entries).slice(0, 4),
+    metrics: buildMetricArtifacts(entries).slice(0, 4)
+  };
+}
+
+function getProviderClass(provider: CoachResponse["provider"]) {
+  if (provider === "agnes") return "knowledge";
+  return provider;
+}
+
 export default function QuestPage() {
   const [state, setState] = useState<AppState>(() => cloneDefaultState());
   const [isHydrated, setIsHydrated] = useState(false);
@@ -271,6 +348,15 @@ export default function QuestPage() {
   const [reportOutput, setReportOutput] = useState("");
   const [coachInput, setCoachInput] = useState("");
   const [coachMessages, setCoachMessages] = useState<CoachMessage[]>([]);
+  const [observationsExpanded, setObservationsExpanded] = useState(false);
+  const [levelRewards, setLevelRewards] = useState<LevelReward[]>([]);
+  const [pinnedRewardIds, setPinnedRewardIds] = useState<string[]>([]);
+  const [activeReward, setActiveReward] = useState<LevelReward | null>(null);
+  const [completedLevelIds, setCompletedLevelIds] = useState<string[]>([]);
+  const [exportDocState, setExportDocState] = useState<ExportDocState>({
+    status: "idle",
+    message: "生成体验报告后，可一键创建飞书文档。"
+  });
   const openedLevelRef = useRef<Record<string, boolean>>({});
   const [backendSessionId, setBackendSessionId] = useState("");
   const [databaseConfigured, setDatabaseConfigured] = useState<boolean | null>(null);
@@ -282,7 +368,7 @@ export default function QuestPage() {
   const [coachState, setCoachState] = useState<CoachState>({
     status: "idle",
     mode: "pre_submit_hint",
-    roleName: "阿引",
+    roleName: "小评",
     messageMarkdown: "正在读取本关任务。先把真实体验过程写进对话框。",
     followUpQuestions: [],
     nextAction: "先写下 1 条真实体验路径。",
@@ -292,8 +378,26 @@ export default function QuestPage() {
   useEffect(() => {
     const nextState = loadStoredState();
     const nextBackendSessionId = loadStoredBackendSessionId();
+    const nextMessages = loadStoredJson<CoachMessage[]>(coachMessagesStorageKey, []);
+    const nextRewards = loadStoredJson<LevelReward[]>(rewardStorageKey, []);
+    const nextPinnedRewardIds = loadStoredJson<string[]>(pinnedRewardsStorageKey, []);
+    const storedCompletedLevelIds = loadStoredJson<string[]>(levelCompletionStorageKey, []);
+    const alreadyCompletedLevelIds = levels
+      .filter((level) => isComplete(level, nextState.submissions[level.id]))
+      .map((level) => level.id);
+    const nextCompletedLevelIds = storedCompletedLevelIds.length ? storedCompletedLevelIds : alreadyCompletedLevelIds;
+
+    openedLevelRef.current = nextMessages.reduce<Record<string, boolean>>((acc, message) => {
+      if (message.levelId) acc[message.levelId] = true;
+      return acc;
+    }, {});
+
     setState(nextState);
     setBackendSessionId(nextBackendSessionId);
+    setCoachMessages(nextMessages);
+    setLevelRewards(nextRewards);
+    setPinnedRewardIds(nextPinnedRewardIds);
+    setCompletedLevelIds(nextCompletedLevelIds);
     setIsHydrated(true);
   }, []);
 
@@ -301,6 +405,26 @@ export default function QuestPage() {
     if (!isHydrated) return;
     window.localStorage.setItem(storageKey, JSON.stringify(state));
   }, [isHydrated, state]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    saveStoredJson(coachMessagesStorageKey, coachMessages);
+  }, [isHydrated, coachMessages]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    saveStoredJson(rewardStorageKey, levelRewards);
+  }, [isHydrated, levelRewards]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    saveStoredJson(pinnedRewardsStorageKey, pinnedRewardIds);
+  }, [isHydrated, pinnedRewardIds]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    saveStoredJson(levelCompletionStorageKey, completedLevelIds);
+  }, [isHydrated, completedLevelIds]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -365,21 +489,46 @@ export default function QuestPage() {
   const coachProviderLabel = getProviderLabel(coachState.provider);
   const coachActivityLabel = getCoachActivityLabel(coachState);
   const currentEntries = useMemo(() => getCurrentEntries(activeLevel, activeSubmission), [activeLevel, activeSubmission]);
-  const allEntries = useMemo(() => getAllFilledEntries(state), [state]);
-  const problemArtifacts = useMemo(() => buildProblemArtifacts(allEntries), [allEntries]);
-  const metricArtifacts = useMemo(() => buildMetricArtifacts(allEntries), [allEntries]);
+  const visibleCurrentEntries = observationsExpanded ? currentEntries : currentEntries.slice(-3);
+  const pinnedRewards = useMemo(
+    () => levelRewards.filter((reward) => pinnedRewardIds.includes(reward.levelId)),
+    [levelRewards, pinnedRewardIds]
+  );
 
   useEffect(() => {
     setAutosaveText(activeSubmission.updatedAt ? `已保存 ${formatTime(activeSubmission.updatedAt)}` : "未保存");
   }, [activeLevel.id, activeSubmission.updatedAt]);
 
   useEffect(() => {
-    if (!isHydrated || openedLevelRef.current[activeLevel.id]) return;
+    if (!isHydrated) return;
+
+    const newlyCompletedLevels = levels.filter(
+      (level) => isComplete(level, state.submissions[level.id]) && !completedLevelIds.includes(level.id)
+    );
+
+    if (!newlyCompletedLevels.length) return;
+
+    const rewards = newlyCompletedLevels.map((level) => buildLevelReward(level, state));
+
+    setLevelRewards((current) => {
+      const rewardMap = new Map(current.map((reward) => [reward.levelId, reward]));
+      rewards.forEach((reward) => rewardMap.set(reward.levelId, reward));
+      return Array.from(rewardMap.values());
+    });
+    setPinnedRewardIds((current) => Array.from(new Set([...current, ...rewards.map((reward) => reward.levelId)])));
+    setCompletedLevelIds((current) => Array.from(new Set([...current, ...rewards.map((reward) => reward.levelId)])));
+    setActiveReward(rewards[0]);
+  }, [isHydrated, state, completedLevelIds]);
+
+  useEffect(() => {
+    const hasActiveLevelConversation = coachMessages.some((message) => message.levelId === activeLevel.id);
+
+    if (!isHydrated || openedLevelRef.current[activeLevel.id] || hasActiveLevelConversation) return;
     openedLevelRef.current[activeLevel.id] = true;
     void requestCoach("pre_submit_hint", {
-      userQuestion: `请作为 Agnes 主动开启 ${activeLevel.id}「${activeLevel.name}」的第一轮对话：先简短说明本关目标，然后只问我一个最关键的问题，引导我开始描述真实体验。`
+      userQuestion: `请作为用户体验官小评主动开启 ${activeLevel.id}「${activeLevel.name}」的第一轮对话：先简短说明本关目标，然后只问我一个最关键的问题，引导我开始描述真实体验。`
     });
-  }, [isHydrated, activeLevel.id]);
+  }, [isHydrated, activeLevel.id, coachMessages]);
 
   function updateState(updater: (current: AppState) => AppState) {
     setState((current) => updater(current));
@@ -466,12 +615,12 @@ export default function QuestPage() {
       fallbackReason: undefined,
       messageMarkdown:
         mode === "final_report"
-          ? "Agnes 正在整理完整体验报告..."
+          ? "小评正在整理完整体验报告..."
           : mode === "post_submit_review"
-            ? "Agnes 正在沉淀本关阶段小结..."
+            ? "小评正在沉淀本关阶段小结..."
             : mode === "guide_chat"
-              ? "Agnes 正在追问和归档你的体验素材..."
-              : "Agnes 正在阅读当前关卡..."
+              ? "小评正在追问和归档你的体验素材..."
+              : "小评正在阅读当前关卡..."
     }));
 
     try {
@@ -522,6 +671,7 @@ export default function QuestPage() {
         {
           id: `guide-${Date.now()}`,
           sender: "guide",
+          levelId: activeLevel.id,
           text: nextCoachState.messageMarkdown,
           provider: nextCoachState.provider
         }
@@ -545,13 +695,24 @@ export default function QuestPage() {
     } catch (error) {
       const message = error instanceof Error ? error.message : "导师点评生成失败。";
 
+      const fallbackText = `小评暂时没有返回有效结果。你可以先继续记录真实体验素材，稍后再让小评追问或生成报告。${message ? `（${message}）` : ""}`;
+
       setCoachState((current) => ({
         ...current,
         status: "error",
-        messageMarkdown: "Agnes 暂时没有返回有效结果，请稍后重试。",
-        followUpQuestions: ["先继续记录真实体验素材。", "稍后再让 Agnes 追问或生成报告。"],
+        messageMarkdown: fallbackText,
+        followUpQuestions: ["先继续记录真实体验素材。", "稍后再让小评追问或生成报告。"],
         nextAction: "素材会先保存在本地，不影响继续闯关。"
       }));
+      setCoachMessages((current) => [
+        ...current,
+        {
+          id: `guide-error-${Date.now()}`,
+          sender: "guide",
+          levelId: activeLevel.id,
+          text: fallbackText
+        }
+      ]);
 
       throw error;
     }
@@ -568,6 +729,7 @@ export default function QuestPage() {
       {
         id: `user-${Date.now()}`,
         sender: "user",
+        levelId: activeLevel.id,
         text: normalizedQuestion
       }
     ]);
@@ -627,6 +789,87 @@ export default function QuestPage() {
     const text = reportOutput.trim() ? reportOutput : await generateFullReport();
     await navigator.clipboard.writeText(text);
     setAutosaveText("报告已复制");
+  }
+
+  async function exportReportToFeishu() {
+    setExportDocState({
+      status: "creating",
+      message: "正在生成报告，并尝试创建飞书 Markdown 文档..."
+    });
+
+    const markdown = reportOutput.trim() ? reportOutput : await generateFullReport();
+
+    try {
+      const response = await fetch("/api/quest/export-doc", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          title: "抖音评价评分用户体验报告",
+          markdown
+        })
+      });
+      const payload = (await response.json()) as Partial<ExportDocResponse> & { error?: string };
+
+      if (!response.ok || (payload.status !== "ready" && payload.status !== "fallback")) {
+        throw new Error(payload.error || "飞书文档创建失败");
+      }
+
+      setExportDocState({
+        status: payload.status,
+        message: payload.message || (payload.status === "ready" ? "飞书 Markdown 文档已创建。" : "飞书 CLI 暂不可用；报告已保留在页面，可先复制 Markdown。"),
+        url: payload.url
+      });
+      setAutosaveText(payload.status === "ready" ? "飞书文档已创建" : "报告已生成，飞书需手动复制");
+    } catch (error) {
+      setExportDocState({
+        status: "fallback",
+        message: error instanceof Error ? `${error.message}；报告已保留在页面，可先复制 Markdown。` : "飞书文档创建失败；报告已保留在页面，可先复制 Markdown。"
+      });
+    }
+  }
+
+  function clearObservations() {
+    const nextState = cloneDefaultState();
+    openedLevelRef.current = {};
+    setState(nextState);
+    setCoachMessages([]);
+    setCoachInput("");
+    setReportCard("");
+    setReportOutput("");
+    setReportCardStatus("尚未生成");
+    setLevelRewards([]);
+    setPinnedRewardIds([]);
+    setActiveReward(null);
+    setCompletedLevelIds([]);
+    setBackendSessionId("");
+    setAutosaveText("已清空观察");
+    setExportDocState({
+      status: "idle",
+      message: "生成体验报告后，可一键创建飞书文档。"
+    });
+    setCoachState({
+      status: "idle",
+      mode: "pre_submit_hint",
+      roleName: "小评",
+      messageMarkdown: "正在读取本关任务。先把真实体验过程写进对话框。",
+      followUpQuestions: [],
+      nextAction: "先写下 1 条真实体验路径。",
+      provider: "rules"
+    });
+    removeStoredKeys([
+      storageKey,
+      backendSessionStorageKey,
+      coachMessagesStorageKey,
+      rewardStorageKey,
+      pinnedRewardsStorageKey,
+      levelCompletionStorageKey
+    ]);
+  }
+
+  function unpinReward(levelId: string) {
+    setPinnedRewardIds((current) => current.filter((item) => item !== levelId));
   }
 
   async function saveToBackend() {
@@ -698,9 +941,13 @@ export default function QuestPage() {
     <div className="app-shell conversation-shell">
       <header className="topbar conversation-topbar">
         <div>
-          <div className="eyebrow">Agnes Guided Quest / 体验报告工坊</div>
+          <div className="eyebrow">抖音评价评分-用户体验平台</div>
           <h1>用对话完成闯关，用证据生成体验报告</h1>
-          <p>保留 6 关循序渐进的训练逻辑，主交互收敛为 Agnes 对话；问题清单和指标地图作为过程副产物沉淀。</p>
+          <p>用对话还原真实体验路径，让用户体验官小评把观察沉淀为可讨论、可验证、可交付的产品体验报告。</p>
+        </div>
+        <div className="topbar-brand" aria-label="抖音生活服务">
+          <span className="douyin-life-logo" aria-hidden="true"><i /></span>
+          <span>抖音生活服务</span>
         </div>
         <div className="hero-stats" aria-label="当前闯关状态">
           <div>
@@ -800,7 +1047,7 @@ export default function QuestPage() {
           </div>
         </nav>
 
-        <section className="conversation-panel" aria-label="Agnes 对话式闯关区">
+        <section className="conversation-panel" aria-label="小评对话式闯关区">
           <div className="mission-brief-card">
             <span className="pill">MISSION {activeLevel.id} · {activeLevel.perspective} · {activeLevel.estimatedMinutes} 分钟</span>
             <div className="mission-brief-grid">
@@ -815,15 +1062,27 @@ export default function QuestPage() {
             </div>
           </div>
 
-          <section className="agnes-console">
-            <div className="agnes-console-header">
-              <div>
-                <span className="guide-kicker">Agnes 业务教练</span>
-                <h2>{coachState.roleName}</h2>
-                <p>{scoreCopy.hint}</p>
+          <section className="coach-console">
+            <div className="coach-console-header">
+              <div className="xiaoping-profile">
+                <div className="xiaoping-avatar" aria-hidden="true">
+                  <span className="avatar-ear left" />
+                  <span className="avatar-ear right" />
+                  <span className="avatar-face">
+                    <i className="avatar-eye left" />
+                    <i className="avatar-eye right" />
+                    <i className="avatar-smile" />
+                  </span>
+                  <span className="avatar-badge">评</span>
+                </div>
+                <div>
+                  <span className="guide-kicker">用户体验官小评</span>
+                  <h2>{coachState.roleName}</h2>
+                  <p>{scoreCopy.hint}</p>
+                </div>
               </div>
               <div className="guide-meta">
-                <span className={`provider-badge ${coachState.provider}`}>{coachProviderLabel}</span>
+                <span className={`provider-badge ${getProviderClass(coachState.provider)}`}>{coachProviderLabel}</span>
                 <span>RANK {activeRank}</span>
                 <span>{coachActivityLabel}</span>
               </div>
@@ -838,18 +1097,18 @@ export default function QuestPage() {
                   </div>
                 ))}
                 {coachState.status === "loading" ? (
-                  <div className="guide-message guide thinking" key="agnes-thinking">
+                  <div className="guide-message guide thinking" key="xiaoping-thinking">
                     <span>{coachState.roleName}</span>
                     <p>
                       <span className="typing-dots" aria-hidden="true"><i /> <i /> <i /></span>
-                      Agnes 正在阅读你的体验素材，并整理下一句追问…
+                      小评正在阅读你的体验素材，并整理下一句追问…
                     </p>
                   </div>
                 ) : null}
                 {!coachMessages.length && coachState.status !== "loading" ? (
                   <div className="guide-message guide">
                     <span>{coachState.roleName}</span>
-                    <p>Agnes 正在准备第一轮问题，请稍等片刻。</p>
+                    <p>小评正在准备第一轮问题，请稍等片刻。</p>
                   </div>
                 ) : null}
               </div>
@@ -858,7 +1117,7 @@ export default function QuestPage() {
                 <textarea
                   value={coachInput}
                   onChange={(event) => setCoachInput(event.target.value)}
-                  placeholder="把体验过程直接写给 Agnes：我从哪里进入、想完成什么、看到了哪些评价、哪里让我犹豫或决定下单……"
+                  placeholder="把体验过程直接写给小评：我从哪里进入、想完成什么、看到了哪些评价、哪里让我犹豫或决定下单……"
                   disabled={coachState.status === "loading"}
                 />
                 <button className="primary-button" type="submit" disabled={!coachInput.trim() || coachState.status === "loading"}>
@@ -908,18 +1167,28 @@ export default function QuestPage() {
               <button className="primary-button" type="button" onClick={goToNextLevel} disabled={!nextLevel || !canAdvance}>
                 {nextLevel ? `进入 ${nextLevel.id}` : "已完成"}
               </button>
+              <button className="ghost-button danger-button" type="button" onClick={clearObservations}>
+                清空观察
+              </button>
             </div>
             <small>{backendSaveState.message}</small>
           </section>
 
-          <section className="artifact-card">
+          <section className="artifact-card observation-card">
             <div className="panel-heading compact">
               <h2>已沉淀观察</h2>
-              <span>{currentEntries.length}/{getLevelFields(activeLevel).length}</span>
+              <div className="inline-actions">
+                <span>{currentEntries.length}/{getLevelFields(activeLevel).length}</span>
+                {currentEntries.length > 3 ? (
+                  <button className="text-button" type="button" onClick={() => setObservationsExpanded((value) => !value)}>
+                    {observationsExpanded ? "收起" : "展开"}
+                  </button>
+                ) : null}
+              </div>
             </div>
-            <div className="artifact-list">
+            <div className={`artifact-list ${observationsExpanded ? "expanded" : "collapsed"}`}>
               {currentEntries.length ? (
-                currentEntries.slice(-6).map((entry) => (
+                visibleCurrentEntries.map((entry) => (
                   <article key={`${entry.field}-${entry.value.slice(0, 12)}`}>
                     <strong>{entry.field}</strong>
                     <p>{entry.value}</p>
@@ -929,30 +1198,49 @@ export default function QuestPage() {
                 <p className="empty-copy">还没有本关素材。先在对话框写一条真实体验。</p>
               )}
             </div>
+            {!observationsExpanded && currentEntries.length > visibleCurrentEntries.length ? (
+              <p className="collapse-hint">已收起 {currentEntries.length - visibleCurrentEntries.length} 条较早观察，展开后可查看全部。</p>
+            ) : null}
           </section>
 
-          <section className="artifact-card">
+          <section className="artifact-card reward-shelf-card">
             <div className="panel-heading compact">
-              <h2>问题清单</h2>
-              <span>过程副产物</span>
+              <h2>闯关奖励</h2>
+              <span>{pinnedRewards.length ? "已固定" : "通关后解锁"}</span>
             </div>
-            <ul className="artifact-bullets">
-              {problemArtifacts.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </section>
-
-          <section className="artifact-card">
-            <div className="panel-heading compact">
-              <h2>指标地图</h2>
-              <span>过程副产物</span>
-            </div>
-            <ul className="artifact-bullets">
-              {metricArtifacts.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
+            {pinnedRewards.length ? (
+              <div className="reward-shelf">
+                {pinnedRewards.map((reward) => (
+                  <article className="reward-mini-card" key={reward.levelId}>
+                    <div>
+                      <strong>{reward.levelId} · {reward.levelName}</strong>
+                      <small>{formatTime(reward.unlockedAt)}</small>
+                    </div>
+                    <section>
+                      <b>问题清单</b>
+                      <ul>
+                        {reward.problems.slice(0, 2).map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </section>
+                    <section>
+                      <b>指标地图</b>
+                      <ul>
+                        {reward.metrics.slice(0, 2).map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </section>
+                    <button className="text-button" type="button" onClick={() => unpinReward(reward.levelId)}>
+                      取消固定
+                    </button>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="empty-copy">本区不会常驻展示问题清单和指标地图；当某一关达成标准后，小评会用奖励弹窗解锁并固定。</p>
+            )}
           </section>
 
           <section className="artifact-card report-artifact-card">
@@ -965,10 +1253,16 @@ export default function QuestPage() {
                 <button className="text-button" type="button" onClick={copyReport}>
                   复制报告
                 </button>
+                <button className="text-button" type="button" onClick={exportReportToFeishu} disabled={exportDocState.status === "creating"}>
+                  生成飞书文档
+                </button>
               </div>
             </div>
             <div className={`report-status ${coachState.status === "ready" || reportCard || reportOutput ? "ready" : ""}`}>
-              {coachState.status === "loading" ? "Agnes 正在处理" : reportCardStatus}
+              {coachState.status === "loading" ? "小评正在处理" : reportCardStatus}
+            </div>
+            <div className={`export-status ${exportDocState.status}`}>
+              {exportDocState.url ? <a href={exportDocState.url} target="_blank" rel="noreferrer">打开飞书文档</a> : exportDocState.message}
             </div>
             {reportCard || reportOutput ? (
               <details className="guide-artifacts" open>
@@ -992,6 +1286,42 @@ export default function QuestPage() {
           </section>
         </aside>
       </main>
+
+      {activeReward ? (
+        <div className="reward-backdrop" role="dialog" aria-modal="true" aria-label="闯关奖励已解锁">
+          <div className="reward-modal">
+            <span className="reward-badge">CLEAR REWARD</span>
+            <h2>{activeReward.levelId}「{activeReward.levelName}」奖励已解锁</h2>
+            <p>小评已把本关素材提炼成问题清单和指标地图，并固定到右侧「闯关奖励」。</p>
+            <div className="reward-grid">
+              <section>
+                <h3>问题清单</h3>
+                <ul>
+                  {activeReward.problems.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </section>
+              <section>
+                <h3>指标地图</h3>
+                <ul>
+                  {activeReward.metrics.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </section>
+            </div>
+            <div className="reward-actions">
+              <button className="secondary-button" type="button" onClick={() => setActiveReward(null)}>
+                已固定，继续闯关
+              </button>
+              <button className="primary-button" type="button" onClick={() => void generateFullReport().then(() => setActiveReward(null))}>
+                生成报告草稿
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

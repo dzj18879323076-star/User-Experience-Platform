@@ -53,7 +53,7 @@ type ModelProviderConfig = {
   timeoutMs: number;
 };
 
-const roleName = "阿引";
+const roleName = "小评";
 const defaultModelTimeoutMs = 45_000;
 const productOpportunityFields = ["产品机会", "评价缺口", "经营诊断机会", "二者缺口", "信任断点", "最大卡点"];
 
@@ -310,14 +310,14 @@ function buildModelPrompt(request: QuestCoachRequest) {
   const level = findLevel(request.levelId);
   const fallback = ruleCoach(request);
 
-  return `你是生活服务新人体验报告平台的 Agnes 业务教练，中文名叫阿引。你的目标不是陪用户玩复杂游戏，而是在保留闯关节奏的前提下，用对话帮助新人把真实体验材料沉淀成高质量产品体验报告。
+  return `你是「抖音评价评分-用户体验平台」的用户体验官，名字叫小评。你的目标不是陪用户玩复杂游戏，而是在保留闯关节奏的前提下，用对话帮助新人把真实体验材料沉淀成高质量产品体验报告。
 
 ${evaluationKnowledgeBase}
 ${stagedGuideRules}
 
 输出必须是 JSON，不要包裹 markdown code fence。JSON schema:
 {
-  "roleName": "阿引",
+  "roleName": "小评",
   "messageMarkdown": "string",
   "followUpQuestions": ["string", "string", "string"],
   "nextAction": "string",
@@ -531,7 +531,7 @@ function toFallbackReason(error: unknown, provider: QuestCoachProvider) {
     return `${error.message} 已切换规则引导。`;
   }
 
-  return `${provider} 调用失败，已切换规则引导。`;
+            return `${provider} 调用失败，已切换备用引导。`;
 }
 
 export async function runQuestCoach(request: QuestCoachRequest): Promise<QuestCoachResponse> {
