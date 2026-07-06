@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   AppState,
   Level,
@@ -270,14 +270,8 @@ export default function QuestPage() {
   const [reportCardStatus, setReportCardStatus] = useState("尚未生成");
   const [reportOutput, setReportOutput] = useState("");
   const [coachInput, setCoachInput] = useState("");
-  const [coachMessages, setCoachMessages] = useState<CoachMessage[]>([
-    {
-      id: "guide-welcome",
-      sender: "guide",
-      text: "我是 Agnes/阿引。你不用先填复杂表单，直接把真实体验过程写给我：你想完成什么、从哪里进入、看到了哪些评价、哪里影响了决策。我会按关卡帮你追问，并把素材沉淀成最终体验报告。",
-      provider: "rules"
-    }
-  ]);
+  const [coachMessages, setCoachMessages] = useState<CoachMessage[]>([]);
+  const openedLevelRef = useRef<Record<string, boolean>>({});
   const [backendSessionId, setBackendSessionId] = useState("");
   const [databaseConfigured, setDatabaseConfigured] = useState<boolean | null>(null);
   const [databaseUrlValid, setDatabaseUrlValid] = useState<boolean | null>(null);
@@ -380,8 +374,11 @@ export default function QuestPage() {
   }, [activeLevel.id, activeSubmission.updatedAt]);
 
   useEffect(() => {
-    if (!isHydrated) return;
-    void requestCoach("pre_submit_hint");
+    if (!isHydrated || openedLevelRef.current[activeLevel.id]) return;
+    openedLevelRef.current[activeLevel.id] = true;
+    void requestCoach("pre_submit_hint", {
+      userQuestion: `请作为 Agnes 主动开启 ${activeLevel.id}「${activeLevel.name}」的第一轮对话：先简短说明本关目标，然后只问我一个最关键的问题，引导我开始描述真实体验。`
+    });
   }, [isHydrated, activeLevel.id]);
 
   function updateState(updater: (current: AppState) => AppState) {
@@ -520,17 +517,15 @@ export default function QuestPage() {
       };
 
       setCoachState(nextCoachState);
-      if (mode !== "pre_submit_hint") {
-        setCoachMessages((current) => [
-          ...current,
-          {
-            id: `guide-${Date.now()}`,
-            sender: "guide",
-            text: nextCoachState.messageMarkdown,
-            provider: nextCoachState.provider
-          }
-        ]);
-      }
+      setCoachMessages((current) => [
+        ...current,
+        {
+          id: `guide-${Date.now()}`,
+          sender: "guide",
+          text: nextCoachState.messageMarkdown,
+          provider: nextCoachState.provider
+        }
+      ]);
 
       if (mode === "post_submit_review" && nextCoachState.reportMarkdown) {
         setReportCard(nextCoachState.reportMarkdown);
@@ -749,55 +744,59 @@ export default function QuestPage() {
       </section>
 
       <main className="conversation-workspace">
-        <nav className="level-map compact-level-map" aria-label="闯关步骤">
-          <div className="panel-heading">
-            <h2>闯关步骤</h2>
-            <span>后台状态机</span>
+        <nav className="level-map quest-map-panel" aria-label="体验闯关地图">
+          <div className="map-heading">
+            <div>
+              <span className="map-kicker">Quest Map</span>
+              <h2>体验地图</h2>
+            </div>
+            <span>{completedCount}/{levels.length} CLEAR</span>
           </div>
-          <div className="level-list compact-level-list">
+
+          <div className="map-stage" aria-label="生活服务评价体验地图">
+            <div className="map-compass" aria-hidden="true">N</div>
+            <div className="map-river" aria-hidden="true" />
+            <div className="map-road road-a" aria-hidden="true" />
+            <div className="map-road road-b" aria-hidden="true" />
+            <div className="map-road road-c" aria-hidden="true" />
+            <div className="map-road road-d" aria-hidden="true" />
+            <div className="map-road road-e" aria-hidden="true" />
+            <div className="map-district district-a" aria-hidden="true" />
+            <div className="map-district district-b" aria-hidden="true" />
+            <div className="map-district district-c" aria-hidden="true" />
+
             {levels.map((level, index) => {
               const completed = isComplete(level, state.submissions[level.id]);
               const active = level.id === state.activeLevelId;
+              const submission = getSubmission(state, level.id);
+              const filledCount = getLevelFields(level).filter((field) => (submission.values[field] || "").trim()).length;
+              const totalCount = getLevelFields(level).length;
+
               return (
                 <button
-                  className={`level-item ${active ? "active" : ""} ${completed ? "completed" : ""}`}
+                  className={`map-landmark landmark-${index + 1} ${active ? "active" : ""} ${completed ? "completed" : ""}`}
                   type="button"
                   key={level.id}
                   onClick={() => switchLevel(level.id)}
                   aria-current={active ? "step" : undefined}
+                  aria-label={`前往 ${level.id} ${level.name}`}
                 >
-                  <span className="level-index">{index + 1}</span>
-                  <span>
-                    <strong>{level.name}</strong>
-                    <small>{level.perspective} · {level.badge}</small>
+                  <span className="landmark-pin">
+                    <span className="landmark-symbol">{index + 1}</span>
                   </span>
-                  <span className="level-state">{completed ? "CLEAR" : active ? "NOW" : "OPEN"}</span>
+                  <span className="landmark-card">
+                    <strong>{level.id} · {level.name}</strong>
+                    <small>{level.badge}</small>
+                    <em>{completed ? "CLEAR" : active ? "NOW" : `${filledCount}/${totalCount}`}</em>
+                  </span>
                 </button>
               );
             })}
           </div>
 
-          <div className="quest-mini-map" aria-label="闯关小地图">
-            <div className="quest-route-line" />
-            {levels.map((level, index) => {
-              const completed = isComplete(level, state.submissions[level.id]);
-              const active = level.id === state.activeLevelId;
-              return (
-                <button
-                  className={`quest-node ${active ? "active" : ""} ${completed ? "completed" : ""}`}
-                  type="button"
-                  key={`map-${level.id}`}
-                  onClick={() => switchLevel(level.id)}
-                  aria-label={`前往 ${level.id} ${level.name}`}
-                >
-                  <span className="quest-node-dot">{index + 1}</span>
-                  <span className="quest-node-copy">
-                    <strong>{level.id}</strong>
-                    <small>{level.name}</small>
-                  </span>
-                </button>
-              );
-            })}
+          <div className="map-legend">
+            <span><i className="legend-dot active" /> 当前关卡</span>
+            <span><i className="legend-dot completed" /> 已沉淀素材</span>
           </div>
         </nav>
 
@@ -838,6 +837,21 @@ export default function QuestPage() {
                     <p>{message.text}</p>
                   </div>
                 ))}
+                {coachState.status === "loading" ? (
+                  <div className="guide-message guide thinking" key="agnes-thinking">
+                    <span>{coachState.roleName}</span>
+                    <p>
+                      <span className="typing-dots" aria-hidden="true"><i /> <i /> <i /></span>
+                      Agnes 正在阅读你的体验素材，并整理下一句追问…
+                    </p>
+                  </div>
+                ) : null}
+                {!coachMessages.length && coachState.status !== "loading" ? (
+                  <div className="guide-message guide">
+                    <span>{coachState.roleName}</span>
+                    <p>Agnes 正在准备第一轮问题，请稍等片刻。</p>
+                  </div>
+                ) : null}
               </div>
 
               <form className="conversation-input-row" onSubmit={askGuide}>
@@ -854,14 +868,6 @@ export default function QuestPage() {
             </div>
 
             <div className="conversation-actions">
-              <button
-                className="ghost-button"
-                type="button"
-                onClick={() => void submitGuideQuestion("请告诉我当前关卡应该怎么体验，先问我一个最关键的问题。", false)}
-                disabled={coachState.status === "loading"}
-              >
-                让 Agnes 开始引导
-              </button>
               <button
                 className="secondary-button"
                 type="button"
