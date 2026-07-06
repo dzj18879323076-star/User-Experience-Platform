@@ -555,6 +555,13 @@ function toFallbackReason(error: unknown, provider: QuestCoachProvider) {
             return `${provider} 调用失败，已切换备用引导。`;
 }
 
+export function runQuestCoachFallback(request: QuestCoachRequest, fallbackReason?: string): QuestCoachResponse {
+  return {
+    ...ruleCoach(request),
+    fallbackReason
+  };
+}
+
 export async function runQuestCoach(request: QuestCoachRequest): Promise<QuestCoachResponse> {
   const config = buildProviderConfig();
 
@@ -565,9 +572,6 @@ export async function runQuestCoach(request: QuestCoachRequest): Promise<QuestCo
   try {
     return await callModelProvider(request, config);
   } catch (error) {
-    return {
-      ...ruleCoach(request),
-      fallbackReason: toFallbackReason(error, config.provider)
-    };
+    return runQuestCoachFallback(request, toFallbackReason(error, config.provider));
   }
 }

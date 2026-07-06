@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import {
   QuestCoachMode,
   QuestCoachRequest,
-  runQuestCoach
+  runQuestCoach,
+  runQuestCoachFallback
 } from "../../../../lib/server/questCoach";
 import { saveQuestProgress } from "../../../../lib/server/questRepository";
 
@@ -104,6 +105,22 @@ async function persistReportArtifact(request: QuestCoachRequest, reportMarkdown?
   });
 }
 
+async function runCoachWithRouteTimeout(coachRequest: QuestCoachRequest) {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutResult = new Promise<ReturnType<typeof runQuestCoachFallback>>((resolve) => {
+    timeoutId = setTimeout(() => {
+      resolve(runQuestCoachFallback(coachRequest, "小评响应超时，已切换规则引导。"));
+    }, 18_000);
+  });
+
+  try {
+    return await Promise.race([runQuestCoach(coachRequest), timeoutResult]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 export async function POST(request: Request) {
   let coachRequest: QuestCoachRequest;
 
@@ -119,7 +136,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await runQuestCoach(coachRequest);
+    const result = await runCoachWithRouteTimeout(coachRequest);
     await persistReportArtifact(coachRequest, result.reportMarkdown);
 
     return NextResponse.json(result);
