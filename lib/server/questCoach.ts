@@ -54,7 +54,7 @@ type ModelProviderConfig = {
 };
 
 const roleName = "小评";
-const defaultModelTimeoutMs = 45_000;
+const defaultModelTimeoutMs = 18_000;
 const productOpportunityFields = ["产品机会", "评价缺口", "经营诊断机会", "二者缺口", "信任断点", "最大卡点"];
 
 const evaluationKnowledgeBase = `
@@ -380,7 +380,7 @@ function getModelTimeoutMs() {
   const raw = process.env.QUEST_AGENT_TIMEOUT_MS || process.env.AGNES_TIMEOUT_MS || "";
   const parsed = Number.parseInt(raw, 10);
 
-  if (Number.isFinite(parsed) && parsed >= 10_000 && parsed <= 120_000) {
+  if (Number.isFinite(parsed) && parsed >= 5_000 && parsed <= 25_000) {
     return parsed;
   }
 
