@@ -53,6 +53,35 @@ type CoachState = CoachResponse & {
   mode: CoachMode;
 };
 
+type CoachApiPayload = Partial<CoachResponse> & {
+  error?: string;
+};
+
+type CoachRequestBody = {
+  sessionId?: string;
+  activeLevelId: string;
+  levelId: string;
+  values: Record<string, string>;
+  score: number;
+  mode: CoachMode;
+  userQuestion?: string;
+  submissions: AppState["submissions"];
+};
+
+class CoachRequestError extends Error {
+  userMessage: string;
+  debugMessage?: string;
+
+  constructor(userMessage: string, debugMessage?: string) {
+    super(userMessage);
+    this.name = "CoachRequestError";
+    this.userMessage = userMessage;
+    this.debugMessage = debugMessage;
+  }
+}
+
+const coachConnectionErrorMessage = "小评连接不稳定，已保留你的素材。请稍后重试，或先继续记录真实体验素材。";
+
 type CoachMessage = {
   id: string;
   sender: "user" | "guide";
@@ -190,6 +219,80 @@ function getProviderLabel(provider: CoachResponse["provider"]) {
   if (provider === "agnes") return "知识库增强";
   if (provider === "openai") return "智能生成";
   return "备用引导";
+}
+
+function getErrorDebugMessage(error: unknown) {
+  if (error instanceof CoachRequestError) {
+    return error.debugMessage || error.message;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
+}
+
+function getErrorUserMessage(error: unknown) {
+  if (error instanceof CoachRequestError) {
+    return error.userMessage;
+  }
+
+  return coachConnectionErrorMessage;
+}
+
+async function parseCoachPayload(response: Response) {
+  const contentType = response.headers.get("content-type") || "";
+  const rawText = await response.text();
+  const trimmedText = rawText.trim();
+
+  if (!trimmedText) {
+    throw new CoachRequestError(coachConnectionErrorMessage, `小评接口返回空内容，HTTP ${response.status}。`);
+  }
+
+  if (!contentType.toLowerCase().includes("application/json")) {
+    throw new CoachRequestError(
+      coachConnectionErrorMessage,
+      `小评接口返回非 JSON 内容，HTTP ${response.status}，Content-Type: ${contentType || "unknown"}，片段: ${trimmedText.slice(0, 120)}`
+    );
+  }
+
+  try {
+    return JSON.parse(trimmedText) as CoachApiPayload;
+  } catch (error) {
+    throw new CoachRequestError(
+      coachConnectionErrorMessage,
+      `小评接口 JSON 解析失败：${getErrorDebugMessage(error)}。响应片段: ${trimmedText.slice(0, 120)}`
+    );
+  }
+}
+
+async function postCoachRequest(body: CoachRequestBody, attempt = 0): Promise<{ response: Response; payload: CoachApiPayload }> {
+  const response = await fetch("/api/quest/coach", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+
+  try {
+    const payload = await parseCoachPayload(response);
+
+    if (!response.ok && response.status >= 500 && attempt === 0) {
+      return postCoachRequest(body, attempt + 1);
+    }
+
+    return { response, payload };
+  } catch (error) {
+    if (attempt === 0) {
+      console.error("小评接口返回异常，准备重试。", getErrorDebugMessage(error));
+      return postCoachRequest(body, attempt + 1);
+    }
+
+    throw error;
+  }
 }
 
 function getCoachActivityLabel(coachState: CoachState) {
@@ -787,23 +890,16 @@ export default function QuestPage() {
     }));
 
     try {
-      const response = await fetch("/api/quest/coach", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          sessionId: options?.sessionId || backendSessionId || undefined,
-          activeLevelId: options?.activeLevelId || state.activeLevelId,
-          levelId: activeLevel.id,
-          values: options?.values || activeSubmission.values,
-          score: options?.score ?? activeScore,
-          mode,
-          userQuestion: options?.userQuestion,
-          submissions: options?.submissions || state.submissions
-        })
+      const { response, payload } = await postCoachRequest({
+        sessionId: options?.sessionId || backendSessionId || undefined,
+        activeLevelId: options?.activeLevelId || state.activeLevelId,
+        levelId: activeLevel.id,
+        values: options?.values || activeSubmission.values,
+        score: options?.score ?? activeScore,
+        mode,
+        userQuestion: options?.userQuestion,
+        submissions: options?.submissions || state.submissions
       });
-      const payload = (await response.json()) as Partial<CoachResponse> & { error?: string };
 
       if (
         !response.ok ||
@@ -856,9 +952,10 @@ export default function QuestPage() {
 
       return nextCoachState;
     } catch (error) {
-      const message = error instanceof Error ? error.message : "导师点评生成失败。";
+      console.error("小评请求失败。", getErrorDebugMessage(error));
+      const message = getErrorUserMessage(error);
 
-      const fallbackText = `小评暂时没有返回有效结果。你可以先继续记录真实体验素材，稍后再让小评追问或生成报告。${message ? `（${message}）` : ""}`;
+      const fallbackText = `小评暂时没有返回有效结果。${message}`;
 
       setCoachState((current) => ({
         ...current,
