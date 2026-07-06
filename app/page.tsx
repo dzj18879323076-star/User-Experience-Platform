@@ -280,24 +280,90 @@ function buildFullReport(state: AppState) {
 
   return `# 抖音生活服务评价体验报告草稿
 
-## 1. 背景与体验范围
+## 1. 基本信息与体验范围
 
 本报告来自「抖音评价评分-用户体验平台」MVP，围绕消费者看评、评价生产、团购商品、创作者内容、商家经营和平台分发进行结构化体验。报告结论只基于当前已记录的真实体验材料，未记录的事实不做推断。
 
-## 2. 核心体验材料
+## 2. 体验目标与分析思路
+
+- 还原用户在抖音生活服务内从种草、找店、看评、团购到写评/评分的关键路径。
+- 站在消费者、商家、作者和平台四类角色判断评价评分的真实价值和体验断点。
+- 对每个问题说明：发生在哪个场景、影响什么决策、当前证据是什么、后续需要验证什么。
+
+## 3. 核心体验总结
+
+- 评价评分不是独立模块，而是影响消费决策、商家经营反馈和平台内容分发的基础信号。
+- 当前素材应优先沉淀为「场景 → 现象 → 影响 → 归因 → 机会 → 待验证指标」的报告表达，避免只堆截图和个人体感。
+- 问题清单和指标地图是过程副产物，最终需要服务一份可讨论、可推进的产品体验报告。
+
+## 4. 分场景体验记录
 
 ${sections.join("\n")}
-## 3. 初步产品机会
+## 5. 初步产品机会
 
 - 将用户路径中的评价入口、评价缺口和交易转化节点串起来。
 - 建立评价质量 rubric，区分决策有用、内容丰富、可信和适合分发。
 - 为商家侧补充可行动的评价诊断信息。
 
-## 4. 待验证问题
+## 6. 待验证问题
 
 - 哪些评价信息最影响用户从 POI 到团购或到店的决策？
 - 商品评价和地点评价分别承担什么决策角色？
 - 哪些评价信号适合被更高权重分发？`;
+}
+
+function getMaterialText(entries: FieldEntry[]) {
+  return entries.map((entry) => `${entry.field}：${entry.value}`).join("\n");
+}
+
+function getStageSummaryReadiness(level: Level, submission: Submission) {
+  const entries = getCurrentEntries(level, submission);
+  const text = getMaterialText(entries);
+  const gaps: string[] = [];
+
+  if (entries.length < 3) gaps.push("至少补 3 条本关真实体验记录：入口、路径节点、评价出现位置或决策卡点。");
+  if (text.length < 180) gaps.push("素材还偏短，需要补充看到的页面现象、用户判断和具体影响。");
+  if (!/(评价|评分|评论|看评|写评|POI|团购|商品|商家|榜单|搜索|分发)/.test(text)) {
+    gaps.push("需要明确这条体验和评价评分业务的关系，例如看评、写评、评分展示、商家反馈或分发价值。");
+  }
+  if (!/(影响|犹豫|决定|下单|转化|信任|有用|无用|真实|低分|高分|机会|优化|建议|卡点|缺口)/.test(text)) {
+    gaps.push("需要写清它影响了谁的什么决策，并给出一个初步产品机会或待验证问题。");
+  }
+
+  return {
+    ready: gaps.length === 0,
+    gaps
+  };
+}
+
+function getFinalReportReadiness(state: AppState) {
+  const entries = getAllFilledEntries(state);
+  const text = getMaterialText(entries);
+  const coveredLevels = new Set(entries.map((entry) => entry.levelId));
+  const gaps: string[] = [];
+
+  if (coveredLevels.size < 3) gaps.push("至少覆盖 3 个关卡，才能形成跨场景的体验报告，而不是单点小结。");
+  if (entries.length < 8) gaps.push("至少沉淀 8 条有效体验记录，包含路径、评价样本、决策影响和产品机会。");
+  if (text.length < 700) gaps.push("整体素材还不够支撑完整报告，需要补充更具体的页面现象、对比样本和业务归因。");
+  if (!/(竞品|大众点评|美团|高德|小红书|对比|差异)/.test(text)) gaps.push("建议补一个竞品或外部产品对比，用于判断体验差异和可借鉴点。");
+  if (!/(指标|点击|曝光|停留|转化|发布率|有用率|回复|分发|口径|验证)/.test(text)) gaps.push("建议补至少一个可验证指标或数据口径，避免报告只停留在主观感受。");
+
+  return {
+    ready: gaps.length === 0,
+    gaps
+  };
+}
+
+function buildInsufficientMaterialMessage(kind: "阶段小结" | "体验报告", gaps: string[]) {
+  return `现在还不适合直接生成${kind}。我先把缺口说清楚：\n\n${gaps.map((gap) => `- ${gap}`).join("\n")}\n\n下一步先补最关键的一条：真实入口 + 页面现象 + 它如何影响消费/写评/商家经营/平台分发判断。补完后我再帮你生成${kind}并创建飞书文档。`;
+}
+
+function buildExportResultMessage(label: string, state: ExportDocResponse) {
+  if (state.status === "ready" && state.url) {
+    return `${label}已生成，并已创建飞书文档：${state.url}`;
+  }
+
+  return `${label}已生成，但飞书文档创建暂时走降级：${state.message}\n\n你可以先保留页面里的 Markdown 草稿，等部署环境具备 lark-cli 后再一键创建飞书文档。`;
 }
 
 function buildProblemArtifacts(entries: FieldEntry[]) {
@@ -755,79 +821,114 @@ export default function QuestPage() {
     await submitGuideQuestion(question, true);
   }
 
-  async function generateFullReport() {
+  async function createFeishuDocument(markdown: string, title: string) {
+    setExportDocState({
+      status: "creating",
+      message: "正在调用飞书 CLI 创建 Markdown 文档..."
+    });
+
+    const response = await fetch("/api/quest/export-doc", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        title,
+        markdown
+      })
+    });
+    const payload = (await response.json()) as Partial<ExportDocResponse> & { error?: string };
+
+    if (!response.ok || (payload.status !== "ready" && payload.status !== "fallback")) {
+      throw new Error(payload.error || "飞书文档创建失败");
+    }
+
+    const nextState: ExportDocResponse = {
+      status: payload.status,
+      message: payload.message || (payload.status === "ready" ? "飞书 Markdown 文档已创建。" : "飞书 CLI 暂不可用；报告已保留在页面，可先复制 Markdown。"),
+      url: payload.url
+    };
+
+    setExportDocState({
+      status: nextState.status,
+      message: nextState.message,
+      url: nextState.url
+    });
+
+    return nextState;
+  }
+
+  function appendGuideMessage(text: string) {
+    setCoachMessages((current) => [
+      ...current,
+      {
+        id: `guide-action-${Date.now()}`,
+        sender: "guide",
+        levelId: activeLevel.id,
+        text
+      }
+    ]);
+  }
+
+  async function generateStageSummaryDocument() {
+    if (coachState.status === "loading" || exportDocState.status === "creating") return;
+
+    const readiness = getStageSummaryReadiness(activeLevel, activeSubmission);
+    if (!readiness.ready) {
+      appendGuideMessage(buildInsufficientMaterialMessage("阶段小结", readiness.gaps));
+      setAutosaveText("阶段小结素材不足");
+      return;
+    }
+
+    try {
+      const result = await requestCoach("post_submit_review");
+      const markdown = result.reportMarkdown || buildReportCard(activeLevel, activeSubmission);
+      setReportCard(markdown);
+      setReportCardStatus(`阶段小结已生成（${getProviderLabel(result.provider)}）`);
+      const exportResult = await createFeishuDocument(markdown, `${activeLevel.id}-${activeLevel.name}-阶段小结`);
+      appendGuideMessage(buildExportResultMessage("阶段小结", exportResult));
+      setAutosaveText(exportResult.status === "ready" ? "阶段小结飞书文档已创建" : "阶段小结已生成，飞书需手动复制");
+    } catch (error) {
+      appendGuideMessage(error instanceof Error ? `阶段小结生成失败：${error.message}` : "阶段小结生成失败，请稍后再试。");
+      setExportDocState({
+        status: "error",
+        message: error instanceof Error ? error.message : "阶段小结生成失败"
+      });
+    }
+  }
+
+  async function generateFullReportDocument() {
+    if (coachState.status === "loading" || exportDocState.status === "creating") return;
+
+    const readiness = getFinalReportReadiness(state);
+    if (!readiness.ready) {
+      appendGuideMessage(buildInsufficientMaterialMessage("体验报告", readiness.gaps));
+      setAutosaveText("体验报告素材不足");
+      return;
+    }
+
     try {
       const result = await requestCoach("final_report");
       const report = result.reportMarkdown || buildFullReport(state);
       setReportOutput(report);
+      const exportResult = await createFeishuDocument(report, "抖音评价评分用户体验报告");
+      appendGuideMessage(buildExportResultMessage("体验报告", exportResult));
+      setAutosaveText(exportResult.status === "ready" ? "体验报告飞书文档已创建" : "报告已生成，飞书需手动复制");
       return report;
-    } catch {
+    } catch (error) {
       const report = buildFullReport(state);
       setReportOutput(report);
+      appendGuideMessage(error instanceof Error ? `体验报告生成或导出失败：${error.message}` : "体验报告生成或导出失败，请稍后再试。");
+      setExportDocState({
+        status: "error",
+        message: error instanceof Error ? error.message : "体验报告生成失败"
+      });
       return report;
     }
   }
 
-  async function copyReportCard() {
-    let nextReportCard = reportCard.trim();
-
-    if (!nextReportCard) {
-      try {
-        nextReportCard = (await requestCoach("post_submit_review")).reportMarkdown || "";
-      } catch {
-        nextReportCard = "";
-      }
-    }
-
-    const text = nextReportCard.trim() ? nextReportCard : buildReportCard(activeLevel, activeSubmission);
-    await navigator.clipboard.writeText(text.trim());
-    setReportCardStatus("已复制到剪贴板");
-    setAutosaveText("阶段小结已复制");
-  }
-
-  async function copyReport() {
-    const text = reportOutput.trim() ? reportOutput : await generateFullReport();
-    await navigator.clipboard.writeText(text);
-    setAutosaveText("报告已复制");
-  }
-
-  async function exportReportToFeishu() {
-    setExportDocState({
-      status: "creating",
-      message: "正在生成报告，并尝试创建飞书 Markdown 文档..."
-    });
-
-    const markdown = reportOutput.trim() ? reportOutput : await generateFullReport();
-
-    try {
-      const response = await fetch("/api/quest/export-doc", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          title: "抖音评价评分用户体验报告",
-          markdown
-        })
-      });
-      const payload = (await response.json()) as Partial<ExportDocResponse> & { error?: string };
-
-      if (!response.ok || (payload.status !== "ready" && payload.status !== "fallback")) {
-        throw new Error(payload.error || "飞书文档创建失败");
-      }
-
-      setExportDocState({
-        status: payload.status,
-        message: payload.message || (payload.status === "ready" ? "飞书 Markdown 文档已创建。" : "飞书 CLI 暂不可用；报告已保留在页面，可先复制 Markdown。"),
-        url: payload.url
-      });
-      setAutosaveText(payload.status === "ready" ? "飞书文档已创建" : "报告已生成，飞书需手动复制");
-    } catch (error) {
-      setExportDocState({
-        status: "fallback",
-        message: error instanceof Error ? `${error.message}；报告已保留在页面，可先复制 Markdown。` : "飞书文档创建失败；报告已保留在页面，可先复制 Markdown。"
-      });
-    }
+  async function generateFullReport() {
+    return generateFullReportDocument();
   }
 
   function clearObservations() {
@@ -941,9 +1042,7 @@ export default function QuestPage() {
     <div className="app-shell conversation-shell">
       <header className="topbar conversation-topbar">
         <div>
-          <div className="eyebrow">抖音评价评分-用户体验平台</div>
-          <h1>用对话完成闯关，用证据生成体验报告</h1>
-          <p>用对话还原真实体验路径，让用户体验官小评把观察沉淀为可讨论、可验证、可交付的产品体验报告。</p>
+          <h1>抖音评价评分-用户体验平台</h1>
         </div>
         <div className="topbar-brand" aria-label="抖音生活服务">
           <span className="douyin-life-logo" aria-hidden="true"><i /></span>
@@ -1131,16 +1230,19 @@ export default function QuestPage() {
                 className="secondary-button"
                 type="button"
                 onClick={() => void submitGuideQuestion("请基于当前素材指出缺失证据，并把下一步体验动作说清楚。", false)}
-                disabled={coachState.status === "loading"}
+                disabled={coachState.status === "loading" || exportDocState.status === "creating"}
               >
                 追问缺失证据
               </button>
-              <button className="ghost-button" type="button" onClick={() => void requestCoach("post_submit_review")} disabled={coachState.status === "loading"}>
-                生成阶段小结
+              <button className="ghost-button" type="button" onClick={() => void generateStageSummaryDocument()} disabled={coachState.status === "loading" || exportDocState.status === "creating"}>
+                {exportDocState.status === "creating" ? "生成中..." : "生成阶段小结"}
               </button>
-              <button className="primary-button" type="button" onClick={() => void generateFullReport()} disabled={coachState.status === "loading"}>
-                生成体验报告
+              <button className="primary-button" type="button" onClick={() => void generateFullReportDocument()} disabled={coachState.status === "loading" || exportDocState.status === "creating"}>
+                {exportDocState.status === "creating" ? "导出中..." : "生成体验报告"}
               </button>
+            </div>
+            <div className={`conversation-export-status ${exportDocState.status}`}>
+              {exportDocState.url ? <a href={exportDocState.url} target="_blank" rel="noreferrer">打开飞书文档</a> : exportDocState.message}
             </div>
           </section>
         </section>
@@ -1240,48 +1342,6 @@ export default function QuestPage() {
               </div>
             ) : (
               <p className="empty-copy">本区不会常驻展示问题清单和指标地图；当某一关达成标准后，小评会用奖励弹窗解锁并固定。</p>
-            )}
-          </section>
-
-          <section className="artifact-card report-artifact-card">
-            <div className="panel-heading compact">
-              <h2>报告产物</h2>
-              <div className="inline-actions">
-                <button className="text-button" type="button" onClick={copyReportCard}>
-                  复制小结
-                </button>
-                <button className="text-button" type="button" onClick={copyReport}>
-                  复制报告
-                </button>
-                <button className="text-button" type="button" onClick={exportReportToFeishu} disabled={exportDocState.status === "creating"}>
-                  生成飞书文档
-                </button>
-              </div>
-            </div>
-            <div className={`report-status ${coachState.status === "ready" || reportCard || reportOutput ? "ready" : ""}`}>
-              {coachState.status === "loading" ? "小评正在处理" : reportCardStatus}
-            </div>
-            <div className={`export-status ${exportDocState.status}`}>
-              {exportDocState.url ? <a href={exportDocState.url} target="_blank" rel="noreferrer">打开飞书文档</a> : exportDocState.message}
-            </div>
-            {reportCard || reportOutput ? (
-              <details className="guide-artifacts" open>
-                <summary>查看草稿</summary>
-                {reportCard ? (
-                  <section>
-                    <strong>阶段小结</strong>
-                    <pre>{reportCard}</pre>
-                  </section>
-                ) : null}
-                {reportOutput ? (
-                  <section>
-                    <strong>体验报告</strong>
-                    <pre>{reportOutput}</pre>
-                  </section>
-                ) : null}
-              </details>
-            ) : (
-              <p className="empty-copy">完成几轮对话后，可生成阶段小结或最终体验报告。</p>
             )}
           </section>
         </aside>
