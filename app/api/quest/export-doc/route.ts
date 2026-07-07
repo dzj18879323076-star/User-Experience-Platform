@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { promisify } from "node:util";
@@ -9,6 +10,7 @@ import { promisify } from "node:util";
 export const runtime = "nodejs";
 
 const execFileAsync = promisify(execFile);
+const requireFromHere = createRequire(import.meta.url);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -66,11 +68,21 @@ function parseCliUrl(stdout: string) {
   }
 }
 
-function getLocalLarkCliPath() {
-  const binaryName = process.platform === "win32" ? "lark-cli.cmd" : "lark-cli";
-  const localPath = join(process.cwd(), "node_modules", ".bin", binaryName);
+function getLarkCliCommand() {
+  try {
+    return {
+      command: process.execPath,
+      argsPrefix: [requireFromHere.resolve("@larksuite/cli/scripts/run.js")]
+    };
+  } catch {
+    const binaryName = process.platform === "win32" ? "lark-cli.cmd" : "lark-cli";
+    const localPath = join(process.cwd(), "node_modules", ".bin", binaryName);
 
-  return existsSync(localPath) ? localPath : "lark-cli";
+    return {
+      command: existsSync(localPath) ? localPath : "lark-cli",
+      argsPrefix: []
+    };
+  }
 }
 
 function getCliEnv() {
@@ -105,7 +117,8 @@ export async function POST(request: Request) {
     await writeFile(filePath, markdown, "utf8");
 
     try {
-      const { stdout } = await execFileAsync(getLocalLarkCliPath(), ["markdown", "+create", "--file", filePath, "--format", "json"], {
+      const cli = getLarkCliCommand();
+      const { stdout } = await execFileAsync(cli.command, [...cli.argsPrefix, "markdown", "+create", "--file", filePath, "--format", "json"], {
         timeout: 60_000,
         maxBuffer: 1024 * 1024,
         env: getCliEnv()
