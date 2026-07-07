@@ -186,7 +186,8 @@ export async function POST(request: Request) {
     try {
       const cli = getLarkCliCommand();
       await ensureLarkCliConfigured(cli);
-      const { stdout } = await execFileAsync(cli, ["markdown", "+create", "--file", filePath, "--format", "json"], {
+      const { stdout } = await execFileAsync(cli, ["markdown", "+create", "--file", fileName, "--format", "json"], {
+        cwd: tempDir,
         timeout: 60_000,
         maxBuffer: 1024 * 1024,
         env: getCliEnv()
