@@ -522,15 +522,56 @@ h3 {
   font-weight: 900;
 }
 
-.map-landmark:hover .landmark-pin,
+.map-landmark:hover:not(:disabled) .landmark-pin,
 .map-landmark.active .landmark-pin {
   transform: translateY(-2px);
 }
 
-.map-landmark:hover .landmark-card,
+.map-landmark:hover:not(:disabled) .landmark-card,
 .map-landmark.active .landmark-card {
   border-color: rgba(255, 59, 48, .38);
   background: #fff3c9;
+}
+
+.map-landmark:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.map-landmark.locked .landmark-pin {
+  filter: drop-shadow(0 5px 9px rgba(23, 32, 38, .12));
+}
+
+.map-landmark.locked .landmark-pin::before {
+  background: #b5ad9b;
+  border-color: rgba(255, 248, 232, .86);
+  box-shadow: inset 0 0 0 1px rgba(23, 32, 38, .05);
+}
+
+.map-landmark.locked .landmark-card {
+  background: rgba(255, 253, 246, .62);
+  border-style: dashed;
+  box-shadow: none;
+}
+
+.map-landmark.locked .landmark-card strong,
+.map-landmark.locked .landmark-card small {
+  color: rgba(98, 94, 88, .72);
+}
+
+.map-landmark.locked .landmark-card em {
+  background: #eee5d6;
+  color: #8d836f;
+}
+
+.map-landmark.completed.locked .landmark-pin::before {
+  background: var(--ok);
+  opacity: .86;
+}
+
+.map-landmark.completed.locked .landmark-card {
+  border-style: solid;
+  background: rgba(243, 250, 237, .78);
 }
 
 .map-landmark.active .landmark-pin::before {
@@ -1311,50 +1352,12 @@ input:focus {
 }
 
 .douyin-life-logo {
-  width: 26px;
-  height: 26px;
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-  border-radius: 9px;
-  background: #15171c;
-  box-shadow: 4px 0 0 rgba(0, 194, 199, .75), -4px 0 0 rgba(255, 59, 48, .75);
-}
-
-.douyin-life-logo::before,
-.douyin-life-logo::after,
-.douyin-life-logo i {
-  content: "";
-  position: absolute;
+  width: 32px;
+  height: 32px;
   display: block;
-  background: #fffdf6;
-}
-
-.douyin-life-logo::before {
-  width: 6px;
-  height: 15px;
-  left: 11px;
-  top: 5px;
-  border-radius: 999px;
-}
-
-.douyin-life-logo::after {
-  width: 12px;
-  height: 6px;
-  left: 11px;
-  top: 5px;
-  border-radius: 999px;
-}
-
-.douyin-life-logo i {
-  width: 10px;
-  height: 10px;
-  left: 5px;
-  bottom: 4px;
-  border: 3px solid #fffdf6;
-  border-top-color: transparent;
-  border-radius: 50%;
-  background: transparent;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  box-shadow: 0 7px 16px rgba(0, 0, 0, .24);
 }
 
 .xiaoping-profile {

@@ -1266,7 +1266,7 @@ export default function QuestPage() {
           <h1>抖音评价评分-用户体验平台</h1>
         </div>
         <div className="topbar-brand" aria-label="抖音生活服务">
-          <span className="douyin-life-logo" aria-hidden="true"><i /></span>
+          <img className="douyin-life-logo" src="/brand/douyin-mark.svg" alt="" aria-hidden="true" />
           <span>抖音生活服务</span>
         </div>
         <div className="hero-stats" aria-label="当前闯关状态">
@@ -1338,15 +1338,18 @@ export default function QuestPage() {
               const submission = getSubmission(state, level.id);
               const filledCount = getLevelFields(level).filter((field) => (submission.values[field] || "").trim()).length;
               const totalCount = getLevelFields(level).length;
+              const locked = !active;
+              const progressLabel = completed ? "CLEAR" : active ? "NOW" : "LOCKED";
 
               return (
                 <button
-                  className={`map-landmark landmark-${index + 1} ${active ? "active" : ""} ${completed ? "completed" : ""}`}
+                  className={`map-landmark landmark-${index + 1} ${active ? "active" : ""} ${completed ? "completed" : ""} ${locked ? "locked" : ""}`}
                   type="button"
                   key={level.id}
-                  onClick={() => switchLevel(level.id)}
+                  disabled={locked}
                   aria-current={active ? "step" : undefined}
-                  aria-label={`前往 ${level.id} ${level.name}`}
+                  aria-disabled={locked}
+                  aria-label={`${level.id} ${level.name}：${active ? "当前关卡" : completed ? "已完成，需按顺序继续" : `未解锁，已填写 ${filledCount}/${totalCount}`}`}
                 >
                   <span className="landmark-pin">
                     <span className="landmark-symbol">{index + 1}</span>
@@ -1354,7 +1357,7 @@ export default function QuestPage() {
                   <span className="landmark-card">
                     <strong>{level.id} · {level.name}</strong>
                     <small>{level.badge}</small>
-                    <em>{completed ? "CLEAR" : active ? "NOW" : `${filledCount}/${totalCount}`}</em>
+                    <em>{progressLabel}</em>
                   </span>
                 </button>
               );

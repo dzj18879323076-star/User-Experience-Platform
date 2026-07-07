@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { promisify } from "node:util";
 
 export const runtime = "nodejs";
@@ -65,6 +66,22 @@ function parseCliUrl(stdout: string) {
   }
 }
 
+function getLocalLarkCliPath() {
+  const binaryName = process.platform === "win32" ? "lark-cli.cmd" : "lark-cli";
+  const localPath = join(process.cwd(), "node_modules", ".bin", binaryName);
+
+  return existsSync(localPath) ? localPath : "lark-cli";
+}
+
+function getCliEnv() {
+  const localBin = join(process.cwd(), "node_modules", ".bin");
+
+  return {
+    ...process.env,
+    PATH: [localBin, process.env.PATH || ""].filter(Boolean).join(delimiter)
+  };
+}
+
 export async function POST(request: Request) {
   let tempDir = "";
 
@@ -88,9 +105,10 @@ export async function POST(request: Request) {
     await writeFile(filePath, markdown, "utf8");
 
     try {
-      const { stdout } = await execFileAsync("lark-cli", ["markdown", "+create", "--file", filePath, "--format", "json"], {
+      const { stdout } = await execFileAsync(getLocalLarkCliPath(), ["markdown", "+create", "--file", filePath, "--format", "json"], {
         timeout: 60_000,
-        maxBuffer: 1024 * 1024
+        maxBuffer: 1024 * 1024,
+        env: getCliEnv()
       });
       const url = parseCliUrl(stdout);
 
