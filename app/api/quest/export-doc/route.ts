@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { promisify } from "node:util";
@@ -10,7 +9,6 @@ import { promisify } from "node:util";
 export const runtime = "nodejs";
 
 const execFileAsync = promisify(execFile);
-const requireFromHere = createRequire(import.meta.url);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -69,20 +67,22 @@ function parseCliUrl(stdout: string) {
 }
 
 function getLarkCliCommand() {
-  try {
-    return {
-      command: process.execPath,
-      argsPrefix: [requireFromHere.resolve("@larksuite/cli/scripts/run.js")]
-    };
-  } catch {
-    const binaryName = process.platform === "win32" ? "lark-cli.cmd" : "lark-cli";
-    const localPath = join(process.cwd(), "node_modules", ".bin", binaryName);
+  const nativeBinaryName = process.platform === "win32" ? "lark-cli.exe" : "lark-cli";
+  const nativePaths = [
+    join(process.cwd(), "node_modules", "@larksuite", "cli", "bin", nativeBinaryName),
+    join(process.cwd(), ".netlify", "functions-internal", "___netlify-server-handler", "node_modules", "@larksuite", "cli", "bin", nativeBinaryName),
+    join(process.cwd(), "node_modules", ".pnpm", "@larksuite+cli@1.0.65", "node_modules", "@larksuite", "cli", "bin", nativeBinaryName)
+  ];
 
-    return {
-      command: existsSync(localPath) ? localPath : "lark-cli",
-      argsPrefix: []
-    };
+  const nativePath = nativePaths.find((item) => existsSync(item));
+  if (nativePath) {
+    return nativePath;
   }
+
+  const shimName = process.platform === "win32" ? "lark-cli.cmd" : "lark-cli";
+  const localShim = join(process.cwd(), "node_modules", ".bin", shimName);
+
+  return existsSync(localShim) ? localShim : "lark-cli";
 }
 
 function getCliEnv() {
@@ -118,7 +118,7 @@ export async function POST(request: Request) {
 
     try {
       const cli = getLarkCliCommand();
-      const { stdout } = await execFileAsync(cli.command, [...cli.argsPrefix, "markdown", "+create", "--file", filePath, "--format", "json"], {
+      const { stdout } = await execFileAsync(cli, ["markdown", "+create", "--file", filePath, "--format", "json"], {
         timeout: 60_000,
         maxBuffer: 1024 * 1024,
         env: getCliEnv()
