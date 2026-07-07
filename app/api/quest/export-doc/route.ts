@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { promisify } from "node:util";
@@ -9,6 +9,10 @@ import { promisify } from "node:util";
 export const runtime = "nodejs";
 
 const execFileAsync = promisify(execFile);
+const larkCliHome = join(tmpdir(), "quest-lark-cli-home");
+const larkCliConfigTimeoutMs = 20_000;
+
+let configPromise: Promise<void> | undefined;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -90,8 +94,71 @@ function getCliEnv() {
 
   return {
     ...process.env,
+    HOME: larkCliHome,
+    XDG_CONFIG_HOME: join(larkCliHome, ".config"),
     PATH: [localBin, process.env.PATH || ""].filter(Boolean).join(delimiter)
   };
+}
+
+function runCliWithInput(command: string, args: string[], input: string, timeoutMs: number) {
+  return new Promise<void>((resolve, reject) => {
+    const child = spawn(command, args, {
+      env: getCliEnv(),
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error("飞书 CLI 配置超时。"));
+    }, timeoutMs);
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      const detail = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
+      reject(new Error(detail || `飞书 CLI 配置失败，退出码 ${code ?? "unknown"}。`));
+    });
+
+    child.stdin.end(input);
+  });
+}
+
+async function ensureLarkCliConfigured(cli: string) {
+  const appId = process.env.LARK_APP_ID || process.env.FEISHU_APP_ID;
+  const appSecret = process.env.LARK_APP_SECRET || process.env.FEISHU_APP_SECRET;
+
+  if (!appId || !appSecret) {
+    return;
+  }
+
+  if (!configPromise) {
+    configPromise = (async () => {
+      await mkdir(larkCliHome, { recursive: true });
+      await runCliWithInput(
+        cli,
+        ["config", "init", "--app-id", appId, "--app-secret-stdin", "--brand", process.env.LARK_CLI_BRAND || "feishu"],
+        `${appSecret}\n`,
+        larkCliConfigTimeoutMs
+      );
+    })();
+  }
+
+  return configPromise;
 }
 
 export async function POST(request: Request) {
@@ -118,6 +185,7 @@ export async function POST(request: Request) {
 
     try {
       const cli = getLarkCliCommand();
+      await ensureLarkCliConfigured(cli);
       const { stdout } = await execFileAsync(cli, ["markdown", "+create", "--file", filePath, "--format", "json"], {
         timeout: 60_000,
         maxBuffer: 1024 * 1024,
