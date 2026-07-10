@@ -182,15 +182,32 @@ ${getNextAction(level, score, "post_submit_review")}
 `;
 }
 
+function extractSystemAction(question?: string) {
+  const trimmed = question?.trim() || "";
+  const matched = trimmed.match(/^\[系统操作：([^\]]+)\]\s*([\s\S]*)$/);
+
+  if (!matched) return undefined;
+
+  return {
+    label: matched[1].trim(),
+    prompt: matched[2].trim()
+  };
+}
+
 function buildChatReply(level: Level, values: Record<string, string>, score: number, userQuestion?: string) {
   const filled = getFilledEntries(level, values);
   const missing = getMissingFields(level, values);
   const question = userQuestion?.trim();
+  const systemAction = extractSystemAction(question);
   const evidence = filled.length ? buildEvidenceMarkdown(level, values) : "你还没有写下有效体验记录。";
   const firstMissing = missing[0];
 
   if (!question) {
     return `你可以直接把真实体验过程写给我：你想完成什么、从哪里进入、看到了哪些评价、哪里影响了决策。\n\n当前在 ${level.id}「${level.name}」：${score >= 80 ? "素材已经比较完整，可以生成阶段小结或进入下一关。" : firstMissing ? `建议先补「${firstMissing}」。` : "建议把已有观察压缩成一个产品问题。"}`;
+  }
+
+  if (systemAction) {
+    return `已执行「${systemAction.label}」。我不会把这个操作当作你的体验素材，只基于当前已沉淀证据做检查。\n\n当前最关键缺口：${firstMissing ? `先补「${firstMissing}」，说明真实场景、入口和发生在哪个页面/动作。` : "补一条页面/评价样本/决策影响，避免直接写成主观结论。"}\n\n当前已沉淀证据：\n${evidence}`;
   }
 
   return `收到，你写的是：「${question}」\n\n我会先把它当作 ${level.id}「${level.name}」的体验素材，而不是直接写成结论。下一步请补一个最关键证据：${firstMissing ? `「${firstMissing}」` : "这条观察对应的页面/评价样本/决策影响"}。\n\n归因时优先判断它属于哪类问题：供给缺口、分发错配、消费决策信息不足、评价信任、商家经营反馈，还是平台治理。\n\n当前已沉淀证据：\n${evidence}`;
@@ -354,6 +371,7 @@ ${stagedGuideRules}
 - final_report 的 reportMarkdown 是完整体验报告草稿，必须包含：基本信息与体验范围、体验目标与分析思路、体验总结、分场景体验记录、问题清单/指标地图、待验证问题。问题清单和指标地图只能作为过程副产物/附录，不要喧宾夺主。
 - final_report 要像产品体验报告，而不是闯关流水账：每个关键问题尽量写成“场景/入口 → 现象 → 影响 → 业务归因 → 机会点/待验证指标”。
 - guide_chat 要像对话教练：先回应用户，再追问一个关键问题，并说明本轮素材会沉淀到哪类报告材料。
+- 如果用户问题以“[系统操作：...]”开头，它是界面按钮触发的系统动作，不是用户体验素材；不要复述为“你写的是”，不要说会沉淀为素材，只能基于当前已沉淀字段检查缺失证据、生成下一步建议或解释门槛。
 
 当前模型超时：${getModelTimeoutMs()}ms
 当前模式：${request.mode}

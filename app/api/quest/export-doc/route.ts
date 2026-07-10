@@ -11,6 +11,8 @@ export const runtime = "nodejs";
 const execFileAsync = promisify(execFile);
 const larkCliHome = join(tmpdir(), "quest-lark-cli-home");
 const larkCliConfigTimeoutMs = 20_000;
+const tenantReadablePermissionHint =
+  "目标权限：企业内成员均可查看。若打开仍提示无权限，请确认飞书应用具备云文档权限配置能力，或由文档所有者在分享设置中开启组织内可阅读。";
 
 let configPromise: Promise<void> | undefined;
 
@@ -173,6 +175,7 @@ export async function POST(request: Request) {
 
     const markdown = typeof payload.markdown === "string" ? payload.markdown.trim() : "";
     const title = typeof payload.title === "string" ? payload.title : "抖音评价评分用户体验报告";
+    const visibility = payload.visibility === "tenant_readable" ? "tenant_readable" : undefined;
 
     if (!markdown) {
       return NextResponse.json({ error: "markdown 不能为空。" }, { status: 400 });
@@ -196,15 +199,23 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         status: "ready",
-        message: url ? "飞书 Markdown 文档已创建。" : "飞书 Markdown 文档已创建，但 CLI 未返回可打开链接。",
-        url
+        message: url
+          ? visibility === "tenant_readable"
+            ? "飞书 Markdown 文档已创建，已按企业内成员可查看目标返回权限提示。"
+            : "飞书 Markdown 文档已创建。"
+          : "飞书 Markdown 文档已创建，但 CLI 未返回可打开链接。",
+        url,
+        visibility,
+        permissionHint: visibility === "tenant_readable" ? tenantReadablePermissionHint : undefined
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "飞书 CLI 调用失败";
 
       return NextResponse.json({
         status: "fallback",
-        message: `${message}；已生成报告 Markdown，请先使用页面内复制能力。`
+        message: `${message}；已生成报告 Markdown，请先使用页面内复制能力。`,
+        visibility,
+        permissionHint: visibility === "tenant_readable" ? tenantReadablePermissionHint : undefined
       });
     }
   } catch (error) {

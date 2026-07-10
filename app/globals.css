@@ -663,6 +663,36 @@ h3 {
   border: 1px solid rgba(23, 32, 38, .09);
 }
 
+.mission-first-step {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 194, 199, .2);
+  background: linear-gradient(135deg, rgba(232, 250, 247, .9), rgba(255, 253, 246, .86));
+}
+
+.mission-first-step span {
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.mission-first-step strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.mission-first-step p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
 .coach-console {
   padding: clamp(14px, 2vw, 22px);
   background:
@@ -766,6 +796,24 @@ h3 {
 
 .guide-message.guide {
   justify-self: start;
+}
+
+.guide-message.action {
+  justify-self: center;
+  max-width: 76%;
+  background: #fff7e6;
+  border-style: dashed;
+  border-color: rgba(242, 184, 75, .52);
+  text-align: center;
+}
+
+.guide-message.action span {
+  color: #9a6210;
+}
+
+.guide-message.action p {
+  color: #6e4b10;
+  font-weight: 800;
 }
 
 .guide-message.thinking {
@@ -1056,6 +1104,73 @@ input:focus {
   background: var(--accent-soft);
 }
 
+.readiness-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.readiness-card {
+  padding: 11px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(23, 32, 38, .1);
+  background: rgba(255, 253, 246, .76);
+}
+
+.readiness-card span {
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.readiness-card strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.readiness-card p {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.readiness-list {
+  display: grid;
+  gap: 5px;
+  margin-top: 7px;
+  padding-left: 17px;
+  color: #6f4b13;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.unlock-hint {
+  margin-top: 10px;
+  padding: 10px 11px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.55;
+}
+
+.unlock-hint.ready {
+  border: 1px solid rgba(40, 167, 69, .2);
+  background: #edf8ef;
+  color: var(--ok);
+}
+
+.unlock-hint.blocked {
+  border: 1px solid rgba(242, 184, 75, .32);
+  background: #fff8e8;
+  color: #7a5410;
+}
+
 .structured-fields {
   padding: 14px;
 }
@@ -1281,7 +1396,8 @@ input:focus {
     justify-content: flex-start;
   }
 
-  .conversation-actions {
+  .conversation-actions,
+  .readiness-panel {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -1303,6 +1419,7 @@ input:focus {
   .hero-stats,
   .status-band,
   .conversation-actions,
+  .readiness-panel,
   .artifact-actions,
   .conversation-input-row {
     grid-template-columns: 1fr;
