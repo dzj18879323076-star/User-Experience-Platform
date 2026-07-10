@@ -14,7 +14,8 @@ const validModes: QuestCoachMode[] = [
   "field_followup",
   "post_submit_review",
   "final_report",
-  "guide_chat"
+  "guide_chat",
+  "organize_observation"
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -84,7 +85,8 @@ function parseCoachRequest(payload: unknown): QuestCoachRequest {
     values: parseValues(payload.values),
     score,
     mode: mode as QuestCoachMode,
-    userQuestion: typeof payload.userQuestion === "string" ? payload.userQuestion.trim().slice(0, 800) : undefined,
+    userQuestion: typeof payload.userQuestion === "string" ? payload.userQuestion.trim().slice(0, 1200) : undefined,
+    targetField: typeof payload.targetField === "string" ? payload.targetField.trim().slice(0, 80) : undefined,
     submissions: parseSubmissions(payload.submissions)
   };
 }

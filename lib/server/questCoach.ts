@@ -2,7 +2,13 @@ import "server-only";
 
 import { AppState, Level, getLevelFields, levels } from "../quest";
 
-export type QuestCoachMode = "pre_submit_hint" | "field_followup" | "post_submit_review" | "final_report" | "guide_chat";
+export type QuestCoachMode =
+  | "pre_submit_hint"
+  | "field_followup"
+  | "post_submit_review"
+  | "final_report"
+  | "guide_chat"
+  | "organize_observation";
 
 export type QuestCoachProvider = "rules" | "openai" | "agnes";
 
@@ -14,6 +20,7 @@ export type QuestCoachRequest = {
   score: number;
   mode: QuestCoachMode;
   userQuestion?: string;
+  targetField?: string;
   submissions?: AppState["submissions"];
 };
 
@@ -23,6 +30,8 @@ export type QuestCoachResponse = {
   followUpQuestions: string[];
   nextAction: string;
   reportMarkdown?: string;
+  capturedField?: string;
+  organizedObservationMarkdown?: string;
   provider: QuestCoachProvider;
   fallbackReason?: string;
 };
@@ -101,6 +110,18 @@ function getMissingFields(level: Level, values: Record<string, string>) {
   return getLevelFields(level).filter((field) => !(values[field] || "").trim());
 }
 
+function getCaptureTargetField(level: Level, values: Record<string, string>) {
+  const fields = getLevelFields(level);
+  const firstMissing = fields.find((field) => !(values[field] || "").trim());
+  if (firstMissing) return firstMissing;
+
+  return (
+    fields.find((field) => /产品机会|评价缺口|问题|卡点|断点|决策/.test(field)) ||
+    fields[fields.length - 1] ||
+    "补充观察"
+  );
+}
+
 function getOpportunity(values: Record<string, string>) {
   for (const field of productOpportunityFields) {
     const value = (values[field] || "").trim();
@@ -138,6 +159,74 @@ function buildEvidenceMarkdown(level: Level, values: Record<string, string>) {
     .join("\n");
 
   return evidence || "- 暂无有效证据。先写下一个真实场景或页面节点。";
+}
+
+function compactRawObservation(text?: string) {
+  const raw = (text || "").replace(/\s+/g, " ").trim();
+  return raw || "用户本轮只上传了截图，尚未补充文字说明。";
+}
+
+function buildRuleOrganizedObservation(level: Level, field: string, rawText?: string) {
+  const raw = compactRawObservation(rawText);
+  const possibleIssue = /难找|找不到|少|缺|不清楚|犹豫|担心|不敢|麻烦|慢|乱|差|无用|不可信|假|刷|卡|断/.test(raw);
+  const possibleAction = /搜索|刷到|点击|进入|看到|下单|收藏|团购|评价|评分|评论|POI|商家|达人|直播|短视频/.test(raw);
+
+  return [`## 小评整理版｜${level.id} ${level.name}`,
+    `- 归档字段：${field}`,
+    `- 原始事实：${raw}`,
+    `- 场景/入口：${possibleAction ? "已从原始描述中出现入口或动作线索，后续需要补齐具体页面节点。" : "待补充具体入口、页面和动作路径。"}`,
+    `- 观察现象：${raw}`,
+    `- 决策影响：${/犹豫|决定|下单|放弃|信任|不信|有用|无用|影响/.test(raw) ? "已出现决策影响线索，建议继续补评价样本或截图证据。" : "待补充它如何影响消费、写评、商家经营或平台分发判断。"}`,
+    `- 初步归因：${possibleIssue ? "可能涉及消费决策信息不足、评价信任或路径承接问题，需用样本继续验证。" : "暂不做确定归因，先作为体验事实沉淀。"}`,
+    `- 待补证据：补一条页面/评价样本/截图路径，并说明可验证指标，如评价曝光、看评停留、团购转化或评价有用率。`].join("\n");
+}
+
+type OrganizedObservationModelResponse = {
+  capturedField?: string;
+  organizedObservationMarkdown?: string;
+};
+
+function parseOrganizedObservationResponse(text: string) {
+  const parsed = JSON.parse(stripJsonFence(text)) as OrganizedObservationModelResponse;
+
+  if (typeof parsed.organizedObservationMarkdown !== "string" || !parsed.organizedObservationMarkdown.trim()) {
+    throw new Error("模型返回格式不符合观察整理协议。");
+  }
+
+  return parsed;
+}
+
+function buildObservationOrganizerPrompt(request: QuestCoachRequest, field: string) {
+  const level = findLevel(request.levelId);
+  const raw = compactRawObservation(request.userQuestion);
+
+  return `你是「抖音评价评分-用户体验平台」的用户体验官小评。请把新人用对话写下的零散观察整理成可沉淀到关卡字段的结构化体验记录。
+
+${evaluationKnowledgeBase}
+${stagedGuideRules}
+
+输出必须是 JSON，不要包裹 markdown code fence。JSON schema:
+{
+  "capturedField": "${field}",
+  "organizedObservationMarkdown": "string"
+}
+
+硬性要求：
+- 只整理用户提供的事实，不编造页面、竞品、数据、结论或截图内容。
+- 保留原始事实，但要把表达整理为“场景/入口、观察现象、决策影响、初步归因、待补证据”。
+- 如果缺少信息，要明确写“待补充/待验证”，不要强行补齐。
+- 语言要像产品体验记录，少写闲聊，多写可进入报告的表达。
+- organizedObservationMarkdown 使用 Markdown，控制在 180-450 字。
+
+当前关卡：${level.id} ${level.name}
+当前视角：${level.perspective}
+关卡目标：${level.goal}
+目标沉淀字段：${field}
+当前已沉淀字段：
+${JSON.stringify(request.values, null, 2)}
+
+用户本轮原始观察：
+${raw}`;
 }
 
 function getNextAction(level: Level, score: number, mode: QuestCoachMode) {
@@ -271,6 +360,21 @@ function ruleCoach(request: QuestCoachRequest): QuestCoachResponse {
   const followUpQuestions = buildFollowUpQuestions(level, request.values, request.score);
   const nextAction = getNextAction(level, request.score, request.mode);
 
+  if (request.mode === "organize_observation") {
+    const capturedField = request.targetField || getCaptureTargetField(level, request.values);
+    const organizedObservationMarkdown = buildRuleOrganizedObservation(level, capturedField, request.userQuestion);
+
+    return {
+      roleName,
+      messageMarkdown: "我已先把这段对话整理成结构化观察，再沉淀到当前关卡字段。",
+      followUpQuestions,
+      nextAction: `已沉淀到「${capturedField}」。下一步补充页面截图、评价样本或决策影响。`,
+      capturedField,
+      organizedObservationMarkdown,
+      provider: "rules"
+    };
+  }
+
   if (request.mode === "final_report") {
     const reportMarkdown = buildFinalReport(request.submissions);
 
@@ -375,6 +479,7 @@ ${stagedGuideRules}
 
 当前模型超时：${getModelTimeoutMs()}ms
 当前模式：${request.mode}
+目标沉淀字段：${request.targetField || "自动选择"}
 用户问题/本轮素材：${request.userQuestion || "无"}
 当前关卡：${level.id} ${level.name}
 当前视角：${level.perspective}
@@ -480,6 +585,9 @@ function parseModelResponse(text: string, provider: QuestCoachProvider): QuestCo
     followUpQuestions: parsed.followUpQuestions.map(String).slice(0, 3),
     nextAction: parsed.nextAction,
     reportMarkdown: typeof parsed.reportMarkdown === "string" ? parsed.reportMarkdown : undefined,
+    capturedField: typeof parsed.capturedField === "string" ? parsed.capturedField : undefined,
+    organizedObservationMarkdown:
+      typeof parsed.organizedObservationMarkdown === "string" ? parsed.organizedObservationMarkdown : undefined,
     provider
   };
 }
@@ -497,7 +605,7 @@ function getProviderUrl(config: ModelProviderConfig) {
   return `${baseUrl}/${config.endpoint === "responses" ? "responses" : "chat/completions"}`;
 }
 
-async function callModelProvider(request: QuestCoachRequest, config: ModelProviderConfig): Promise<QuestCoachResponse> {
+async function callModelText(prompt: string, config: ModelProviderConfig) {
   if (!config.apiKey) {
     throw new Error(`${config.provider} API key 未配置。`);
   }
@@ -508,7 +616,6 @@ async function callModelProvider(request: QuestCoachRequest, config: ModelProvid
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
-  const prompt = buildModelPrompt(request);
 
   try {
     const response = await fetch(getProviderUrl(config), {
@@ -555,10 +662,33 @@ async function callModelProvider(request: QuestCoachRequest, config: ModelProvid
       throw new Error(`${config.provider} 返回内容为空。`);
     }
 
-    return parseModelResponse(text, config.provider);
+    return text;
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function callModelProvider(request: QuestCoachRequest, config: ModelProviderConfig): Promise<QuestCoachResponse> {
+  if (request.mode === "organize_observation") {
+    const level = findLevel(request.levelId);
+    const capturedField = request.targetField || getCaptureTargetField(level, request.values);
+    const text = await callModelText(buildObservationOrganizerPrompt(request, capturedField), config);
+    const parsed = parseOrganizedObservationResponse(text);
+
+    return {
+      roleName,
+      messageMarkdown: "我已先把这段对话整理成结构化观察，再沉淀到当前关卡字段。",
+      followUpQuestions: buildFollowUpQuestions(level, request.values, request.score),
+      nextAction: `已沉淀到「${parsed.capturedField || capturedField}」。下一步补充页面截图、评价样本或决策影响。`,
+      capturedField: parsed.capturedField || capturedField,
+      organizedObservationMarkdown: parsed.organizedObservationMarkdown,
+      provider: config.provider
+    };
+  }
+
+  const prompt = buildModelPrompt(request);
+  const text = await callModelText(prompt, config);
+  return parseModelResponse(text, config.provider);
 }
 
 function toFallbackReason(error: unknown, provider: QuestCoachProvider) {
@@ -570,7 +700,7 @@ function toFallbackReason(error: unknown, provider: QuestCoachProvider) {
     return `${error.message} 已切换规则引导。`;
   }
 
-            return `${provider} 调用失败，已切换备用引导。`;
+  return `${provider} 调用失败，已切换备用引导。`;
 }
 
 export function runQuestCoachFallback(request: QuestCoachRequest, fallbackReason?: string): QuestCoachResponse {

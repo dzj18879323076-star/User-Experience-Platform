@@ -36,7 +36,13 @@ type QuestHealthResponse = {
   message: string;
 };
 
-type CoachMode = "pre_submit_hint" | "field_followup" | "post_submit_review" | "final_report" | "guide_chat";
+type CoachMode =
+  | "pre_submit_hint"
+  | "field_followup"
+  | "post_submit_review"
+  | "final_report"
+  | "guide_chat"
+  | "organize_observation";
 
 type CoachResponse = {
   roleName: string;
@@ -44,6 +50,8 @@ type CoachResponse = {
   followUpQuestions: string[];
   nextAction: string;
   reportMarkdown?: string;
+  capturedField?: string;
+  organizedObservationMarkdown?: string;
   provider: "rules" | "openai" | "agnes";
   fallbackReason?: string;
 };
@@ -65,6 +73,7 @@ type CoachRequestBody = {
   score: number;
   mode: CoachMode;
   userQuestion?: string;
+  targetField?: string;
   submissions: AppState["submissions"];
 };
 
@@ -215,6 +224,11 @@ function getRankLabel(score: number) {
   if (score >= 80) return "A";
   if (score >= 55) return "B";
   return "C";
+}
+
+function getOrganizationProviderLabel(provider: CoachResponse["provider"]) {
+  if (provider === "rules") return "规则整理";
+  return getProviderLabel(provider);
 }
 
 function getProviderLabel(provider: CoachResponse["provider"]) {
@@ -760,8 +774,8 @@ export default function QuestPage() {
     setState((current) => updater(current));
   }
 
-  function persistConversationObservation(text: string) {
-    const field = getCaptureTargetField(activeLevel, activeSubmission);
+  function persistConversationObservation(text: string, targetField?: string) {
+    const field = targetField || getCaptureTargetField(activeLevel, activeSubmission);
     const existingValue = (activeSubmission.values[field] || "").trim();
     const nextValue = existingValue ? `${existingValue}\n\n${text}` : text;
     const nextSubmission: Submission = {
@@ -785,7 +799,7 @@ export default function QuestPage() {
         [activeLevel.id]: nextSubmission
       }
     }));
-    setAutosaveText(`已沉淀到「${field}」`);
+    setAutosaveText(`已由小评整理并沉淀到「${field}」`);
 
     return {
       values: nextSubmission.values,
@@ -889,6 +903,7 @@ export default function QuestPage() {
       activeLevelId?: string;
       values?: Record<string, string>;
       score?: number;
+      targetField?: string;
       submissions?: AppState["submissions"];
     }
   ) {
@@ -917,6 +932,7 @@ export default function QuestPage() {
         score: options?.score ?? activeScore,
         mode,
         userQuestion: options?.userQuestion,
+        targetField: options?.targetField,
         submissions: options?.submissions || state.submissions
       });
 
@@ -939,6 +955,9 @@ export default function QuestPage() {
         followUpQuestions: payload.followUpQuestions.map(String).slice(0, 3),
         nextAction: payload.nextAction,
         reportMarkdown: typeof payload.reportMarkdown === "string" ? payload.reportMarkdown : undefined,
+        capturedField: typeof payload.capturedField === "string" ? payload.capturedField : undefined,
+        organizedObservationMarkdown:
+          typeof payload.organizedObservationMarkdown === "string" ? payload.organizedObservationMarkdown : undefined,
         provider: payload.provider,
         fallbackReason: typeof payload.fallbackReason === "string" ? payload.fallbackReason : undefined
       };
@@ -1003,7 +1022,13 @@ export default function QuestPage() {
 
     const displayQuestion = normalizedQuestion || "我上传了体验截图，请先帮我看图追问。";
     const captureText = `${displayQuestion}${buildImageContext(attachments)}`;
-    const captured = shouldCapture ? persistConversationObservation(captureText) : undefined;
+    let captured:
+      | {
+          values: Record<string, string>;
+          score: number;
+          submissions: AppState["submissions"];
+        }
+      | undefined;
 
     setCoachMessages((current) => [
       ...current,
@@ -1015,6 +1040,28 @@ export default function QuestPage() {
         attachments
       }
     ]);
+
+    if (shouldCapture) {
+      const targetField = getCaptureTargetField(activeLevel, activeSubmission);
+
+      try {
+        setAutosaveText("小评正在整理观察...");
+        const organized = await requestCoach("organize_observation", {
+          userQuestion: captureText,
+          targetField,
+          values: activeSubmission.values,
+          score: activeScore,
+          submissions: state.submissions
+        });
+        const organizedText = organized.organizedObservationMarkdown?.trim() || captureText;
+        const capturedField = organized.capturedField || targetField;
+        captured = persistConversationObservation(organizedText, capturedField);
+        appendGuideMessage(`已整理并沉淀到「${capturedField}」（${getOrganizationProviderLabel(organized.provider)}）。后续报告会优先使用这版结构化观察，原始输入仍保留在对话记录里。`);
+      } catch {
+        captured = persistConversationObservation(captureText, targetField);
+        appendGuideMessage(`小评整理暂时不可用，已先把原始素材沉淀到「${targetField}」。稍后可以继续补证据或重新追问。`);
+      }
+    }
 
     try {
       await requestCoach("guide_chat", {
@@ -1449,7 +1496,7 @@ export default function QuestPage() {
             <div className="mission-first-step">
               <span>第一步</span>
               <strong>先写一段真实经历，不要先写结论。</strong>
-              <p>建议从“我为什么找店 / 从哪里进入 / 看到哪些评价 / 哪里影响决策”开始，素材会自动沉淀到当前关卡字段。</p>
+              <p>建议从“我为什么找店 / 从哪里进入 / 看到哪些评价 / 哪里影响决策”开始，小评会先整理成结构化观察，再沉淀到当前关卡字段。</p>
             </div>
           </div>
 
@@ -1547,7 +1594,7 @@ export default function QuestPage() {
                   </div>
                 </div>
                 <button className="primary-button" type="submit" disabled={(!coachInput.trim() && !pendingImages.length) || coachState.status === "loading"}>
-                  发送并沉淀
+                  发送并整理沉淀
                 </button>
               </form>
             </div>
@@ -1647,6 +1694,7 @@ export default function QuestPage() {
                 visibleCurrentEntries.map((entry) => (
                   <article key={`${entry.field}-${entry.value.slice(0, 12)}`}>
                     <strong>{entry.field}</strong>
+                    <span className="organization-badge">小评整理版</span>
                     <p>{entry.value}</p>
                   </article>
                 ))
