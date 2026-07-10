@@ -1054,7 +1054,8 @@ export default function QuestPage() {
           submissions: state.submissions
         });
         const organizedText = organized.organizedObservationMarkdown?.trim() || captureText;
-        const capturedField = organized.capturedField || targetField;
+        const levelFields = getLevelFields(activeLevel);
+        const capturedField = organized.capturedField && levelFields.includes(organized.capturedField) ? organized.capturedField : targetField;
         captured = persistConversationObservation(organizedText, capturedField);
         appendGuideMessage(`已整理并沉淀到「${capturedField}」（${getOrganizationProviderLabel(organized.provider)}）。后续报告会优先使用这版结构化观察，原始输入仍保留在对话记录里。`);
       } catch {

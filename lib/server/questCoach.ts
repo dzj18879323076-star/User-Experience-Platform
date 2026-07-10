@@ -196,6 +196,17 @@ function parseOrganizedObservationResponse(text: string) {
   return parsed;
 }
 
+function normalizeCapturedField(level: Level, values: Record<string, string>, requestedField: string, modelField?: string) {
+  const fields = getLevelFields(level);
+  const normalizedModelField = modelField?.trim();
+  const normalizedRequestedField = requestedField.trim();
+
+  if (normalizedModelField && fields.includes(normalizedModelField)) return normalizedModelField;
+  if (normalizedRequestedField && fields.includes(normalizedRequestedField)) return normalizedRequestedField;
+
+  return getCaptureTargetField(level, values);
+}
+
 function buildObservationOrganizerPrompt(request: QuestCoachRequest, field: string) {
   const level = findLevel(request.levelId);
   const raw = compactRawObservation(request.userQuestion);
@@ -674,13 +685,14 @@ async function callModelProvider(request: QuestCoachRequest, config: ModelProvid
     const capturedField = request.targetField || getCaptureTargetField(level, request.values);
     const text = await callModelText(buildObservationOrganizerPrompt(request, capturedField), config);
     const parsed = parseOrganizedObservationResponse(text);
+    const safeCapturedField = normalizeCapturedField(level, request.values, capturedField, parsed.capturedField);
 
     return {
       roleName,
       messageMarkdown: "我已先把这段对话整理成结构化观察，再沉淀到当前关卡字段。",
       followUpQuestions: buildFollowUpQuestions(level, request.values, request.score),
-      nextAction: `已沉淀到「${parsed.capturedField || capturedField}」。下一步补充页面截图、评价样本或决策影响。`,
-      capturedField: parsed.capturedField || capturedField,
+      nextAction: `已沉淀到「${safeCapturedField}」。下一步补充页面截图、评价样本或决策影响。`,
+      capturedField: safeCapturedField,
       organizedObservationMarkdown: parsed.organizedObservationMarkdown,
       provider: config.provider
     };
